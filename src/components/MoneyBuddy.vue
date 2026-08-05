@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { formatBaht } from '../utils/format'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useSalarySettings } from '../composables/useSalarySettings'
+import type { Transaction } from '../types/transaction'
+import { createFinancialForecast } from '../utils/forecast'
+import { formatBaht, formatDate } from '../utils/format'
 
 type Mood = 'ready' | 'happy' | 'worried' | 'crying'
 
@@ -8,12 +11,38 @@ const props = defineProps<{
   income: number
   expense: number
   balance: number
+  transactions: Transaction[]
   scopeLabel?: string
 }>()
 
+const emit = defineEmits<{
+  editSalary: []
+}>()
+
+const { monthlySalary, salaryDay, salaryHidden, toggleSalaryVisibility } = useSalarySettings()
 const reactionIndex = ref(0)
 const isTapped = ref(false)
-let tapTimer: ReturnType<typeof setTimeout> | undefined
+let tapTimer: ReturnType<typeof window.setTimeout> | undefined
+let dateRefreshTimer: ReturnType<typeof window.setInterval> | undefined
+
+const toLocalIsoDate = (date: Date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const currentDate = ref(toLocalIsoDate(new Date()))
+const refreshCurrentDate = () => {
+  currentDate.value = toLocalIsoDate(new Date())
+}
+
+const forecast = computed(() => createFinancialForecast({
+  transactions: props.transactions,
+  monthlySalary: monthlySalary.value,
+  salaryDay,
+  today: currentDate.value,
+}))
 
 const spendingRatio = computed(() => {
   if (props.income <= 0) return props.expense > 0 ? 100 : 0
@@ -21,44 +50,113 @@ const spendingRatio = computed(() => {
 })
 
 const mood = computed<Mood>(() => {
-  if (props.income === 0 && props.expense === 0) return 'ready'
+  if (props.income === 0 && props.expense === 0 && !forecast.value.hasSpendingData) return 'ready'
+  if (forecast.value.status === 'risk') return 'crying'
   if (props.expense > 0 && (props.income <= 0 || spendingRatio.value >= 80)) return 'crying'
-  if (spendingRatio.value >= 50) return 'worried'
+  if (forecast.value.status === 'watch' || spendingRatio.value >= 50) return 'worried'
   return 'happy'
 })
 
-const messages: Record<Mood, string[]> = {
+const forecastMessage = computed(() => {
+  const result = forecast.value
+
+  if (!result.hasSpendingData) {
+    return salaryHidden.value
+      ? `ตั้งวันเงินเดือนไว้วันที่ ${result.salaryDay} แล้ว เริ่มจดรายจ่ายเพื่อให้คาดการณ์แม่นขึ้นนะ`
+      : `ตั้งเงินเดือนไว้ ${formatBaht(result.monthlySalary)} วันที่ ${result.salaryDay} เริ่มจดรายจ่ายเพื่อให้คาดการณ์แม่นขึ้นนะ`
+  }
+
+  if (result.status === 'risk') {
+    if (result.balanceBeforeSalary < 0) {
+      return `ถ้าใช้เท่าเดิม เงินอาจขาด ${formatBaht(Math.abs(result.balanceBeforeSalary))} ก่อนเงินเดือนรอบหน้า`
+    }
+    return `แนวโน้มอีก 30 วันอาจติดลบ ${formatBaht(Math.abs(result.projectedBalance30Days))} ลองลดรายจ่ายกันนะ`
+  }
+
+  if (result.status === 'watch') {
+    return `ช่วงนี้ใช้เฉลี่ย ${formatBaht(result.averageDailyExpense)} ต่อวัน ลองชะลอรายจ่ายที่ไม่จำเป็นนะ`
+  }
+
+  return `ถ้าใช้จ่ายใกล้เคียงเดิม ก่อนเงินเดือนเข้าคาดว่าจะเหลือ ${formatBaht(result.balanceBeforeSalary)}`
+})
+
+const messages = computed<Record<Mood, string[]>>(() => ({
   ready: [
+    forecastMessage.value,
     'พร้อมช่วยดูแลเงินแล้ว เพิ่มรายการแรกได้เลย!',
-    'เริ่มจากบันทึกรายรับก่อนก็ได้นะ',
+    'เริ่มจากบันทึกรายรับหรือรายจ่ายวันนี้ก่อนก็ได้นะ',
   ],
   happy: [
-    'เก่งมาก! ยังเหลือเงินให้เก็บอีกเยอะเลย',
-    'วันนี้น้องอารมณ์ดี เพราะคุณคุมรายจ่ายได้ดี!',
-    `ยอดคงเหลือ ${formatBaht(props.balance)} รักษาจังหวะนี้ไว้นะ`,
+    forecastMessage.value,
+    'เก่งมาก! แนวโน้มการเงินยังอยู่ในระดับสบายใจ',
+    `ยอดคงเหลือถึงวันนี้ ${formatBaht(forecast.value.currentBalance)} รักษาจังหวะนี้ไว้นะ`,
   ],
   worried: [
-    'เริ่มใช้เกินครึ่งของรายรับแล้ว ลองชะลอสักนิดนะ',
+    forecastMessage.value,
     'ก่อนซื้อครั้งหน้า ลองรอ 10 นาทีแล้วถามตัวเองอีกที',
     'ลองดูรายการย้อนหลัง อาจมีค่าใช้จ่ายที่ลดได้',
   ],
   crying: [
-    'ฮือ... รายจ่ายแตะ 80% ของรายรับแล้วนะ',
+    forecastMessage.value,
     'พักซื้อของที่ไม่จำเป็นก่อน น้องเป็นห่วง!',
-    'ลองตั้งเป้าลดรายจ่ายรายการถัดไปกันนะ',
+    'ลองตั้งเป้าลดค่าใช้จ่ายเฉลี่ยต่อวันกันนะ',
   ],
-}
+}))
 
 const message = computed(() => {
-  const choices = messages[mood.value]
+  const choices = messages.value[mood.value]
   return choices[reactionIndex.value % choices.length]
 })
 
 const statusLabel = computed(() => {
   if (mood.value === 'ready') return 'รอข้อมูลแรก'
   if (mood.value === 'happy') return 'บริหารได้ดี'
-  if (mood.value === 'worried') return 'เริ่มใช้เยอะ'
-  return 'ใช้จ่ายสูงแล้ว'
+  if (mood.value === 'worried') return 'ควรเฝ้าดู'
+  return 'เสี่ยงเงินไม่พอ'
+})
+
+const forecastStatusLabel = computed(() => {
+  if (forecast.value.status === 'insufficient') return 'กำลังเรียนรู้'
+  if (forecast.value.status === 'safe') return 'แนวโน้มดี'
+  if (forecast.value.status === 'watch') return 'ควรระวัง'
+  return 'มีความเสี่ยง'
+})
+
+const forecastConfidenceLabel = computed(() => {
+  if (forecast.value.confidence === 'high') return 'ความมั่นใจสูง'
+  if (forecast.value.confidence === 'medium') return 'ความมั่นใจปานกลาง'
+  return 'ข้อมูลยังน้อย'
+})
+
+const nextSalaryTiming = computed(() => {
+  if (forecast.value.daysUntilSalary === 0) return 'วันนี้'
+  if (forecast.value.daysUntilSalary === 1) return 'พรุ่งนี้'
+  return `อีก ${forecast.value.daysUntilSalary} วัน`
+})
+
+const forecastAdvice = computed(() => {
+  const result = forecast.value
+
+  if (!result.hasSpendingData) {
+    return 'ยังไม่มีข้อมูลรายจ่ายใน 90 วันที่ผ่านมา บันทึกรายจ่ายเพิ่มแล้วน้องจะปรับการคาดการณ์ให้อัตโนมัติ'
+  }
+
+  if (result.status === 'risk') {
+    if (result.safeDailyBudget !== null) {
+      return `เพื่อให้ถึงวันเงินเดือนออก ควรใช้ไม่เกินประมาณ ${formatBaht(result.safeDailyBudget)} ต่อวัน`
+    }
+    return 'ยอดคาดการณ์มีโอกาสติดลบ ควรชะลอรายจ่ายและตรวจรายการที่ลดได้ก่อน'
+  }
+
+  if (result.status === 'watch') {
+    const monthlyTrend = result.averageDailyExpense * 30
+    if (monthlyTrend > result.monthlySalary) {
+      return `แนวโน้มรายจ่าย 30 วันสูงกว่าเงินเดือนประมาณ ${formatBaht(monthlyTrend - result.monthlySalary)}`
+    }
+    return 'รายจ่ายเฉลี่ยเริ่มใกล้งบที่ใช้ได้ต่อวัน ลองเว้นรายจ่ายที่ไม่จำเป็นบางรายการ'
+  }
+
+  return `หลังเงินเดือนรอบหน้าเข้า คาดว่าจะมี ${formatBaht(result.balanceAfterSalary)} หากพฤติกรรมการใช้เงินใกล้เคียงเดิม`
 })
 
 const progressWidth = computed(() => `${Math.min(spendingRatio.value, 100)}%`)
@@ -74,6 +172,18 @@ const react = () => {
     }, 520)
   })
 }
+
+onMounted(() => {
+  refreshCurrentDate()
+  dateRefreshTimer = window.setInterval(refreshCurrentDate, 60_000)
+  window.addEventListener('focus', refreshCurrentDate)
+})
+
+onBeforeUnmount(() => {
+  window.clearTimeout(tapTimer)
+  window.clearInterval(dateRefreshTimer)
+  window.removeEventListener('focus', refreshCurrentDate)
+})
 </script>
 
 <template>
@@ -170,6 +280,93 @@ const react = () => {
         <text class="baht" x="108" y="95" text-anchor="middle">฿</text>
       </svg>
     </button>
+
+    <section
+      class="forecast-panel"
+      :class="`forecast-panel--${forecast.status}`"
+      aria-labelledby="forecast-title"
+    >
+      <header class="forecast-heading">
+        <div>
+          <span>วิเคราะห์อนาคต</span>
+          <h3 id="forecast-title">คาดการณ์ 30 วัน</h3>
+        </div>
+        <div class="forecast-heading__actions">
+          <span class="forecast-status">{{ forecastStatusLabel }}</span>
+          <button
+            class="forecast-privacy"
+            type="button"
+            :aria-label="salaryHidden ? 'แสดงเงินเดือน' : 'เบลอเงินเดือน'"
+            :aria-pressed="!salaryHidden"
+            :title="salaryHidden ? 'แสดงเงินเดือน' : 'เบลอเงินเดือน'"
+            @click="toggleSalaryVisibility"
+          >
+            <svg v-if="salaryHidden" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 3l18 18M10.6 10.7a2 2 0 0 0 2.7 2.7M9.9 4.3A10.7 10.7 0 0 1 12 4c5.5 0 9 5.1 9 5.1a14.8 14.8 0 0 1-2.5 2.8M6.6 6.7C4.4 8.2 3 10.9 3 10.9S6.5 16 12 16c1 0 2-.2 2.8-.5" />
+            </svg>
+            <svg v-else viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 12s3.5-5 9-5 9 5 9 5-3.5 5-9 5-9-5-9-5Z" />
+              <circle cx="12" cy="12" r="2.5" />
+            </svg>
+          </button>
+          <button type="button" @click="emit('editSalary')">ตั้งค่า</button>
+        </div>
+      </header>
+
+      <div class="forecast-metrics">
+        <article>
+          <span>รายจ่ายเฉลี่ย / วัน</span>
+          <strong>
+            {{ forecast.hasSpendingData ? formatBaht(forecast.averageDailyExpense) : 'รอข้อมูล' }}
+          </strong>
+          <small v-if="forecast.hasSpendingData">
+            {{ forecast.historyDays }} วัน · {{ forecast.expenseRecordCount }} รายการ
+          </small>
+          <small v-else>เริ่มจดรายจ่ายเพื่อวิเคราะห์</small>
+        </article>
+
+        <article>
+          <span>เงินเดือนรอบหน้า</span>
+          <strong
+            class="salary-amount"
+            :aria-label="salaryHidden ? 'ซ่อนจำนวนเงินเดือนอยู่' : formatBaht(forecast.monthlySalary)"
+          >
+            <span :class="{ 'is-blurred': salaryHidden }" aria-hidden="true">
+              {{ formatBaht(forecast.monthlySalary) }}
+            </span>
+          </strong>
+          <small>
+            <time :datetime="forecast.nextSalaryDate">{{ formatDate(forecast.nextSalaryDate) }}</time>
+            · {{ nextSalaryTiming }}
+          </small>
+        </article>
+
+        <article>
+          <span>คาดว่าก่อนเงินเดือนเข้า</span>
+          <strong :class="{ 'is-negative': forecast.balanceBeforeSalary < 0 }">
+            {{ formatBaht(forecast.balanceBeforeSalary) }}
+          </strong>
+          <small>หักรายจ่ายคาดการณ์ {{ formatBaht(forecast.projectedExpenseUntilSalary) }}</small>
+        </article>
+
+        <article>
+          <span>ยอดคาดการณ์อีก 30 วัน</span>
+          <strong :class="{ 'is-negative': forecast.projectedBalance30Days < 0 }">
+            {{ formatBaht(forecast.projectedBalance30Days) }}
+          </strong>
+          <small>
+            รายจ่าย {{ formatBaht(forecast.projectedExpense30Days) }} · เงินเดือน
+            {{ forecast.salaryPaymentsIn30Days }} รอบ
+          </small>
+        </article>
+      </div>
+
+      <p class="forecast-advice">{{ forecastAdvice }}</p>
+      <footer>
+        {{ forecastConfidenceLabel }} · คำนวณจากข้อมูลสูงสุด 90 วัน · เงินเดือนวันที่
+        {{ forecast.salaryDay }} (ก.พ. ใช้วันสุดท้าย)
+      </footer>
+    </section>
   </section>
 </template>
 
@@ -392,6 +589,246 @@ const react = () => {
 .meter-zones {
   margin-top: 5px;
   color: #9aa39f;
+  font-size: 0.55rem;
+}
+
+.forecast-panel {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 11px;
+  margin-top: 3px;
+  padding: 15px;
+  border: 1px solid rgba(70, 126, 98, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.76);
+  font-family: 'Noto Sans Thai', sans-serif;
+  box-shadow: 0 6px 20px rgba(26, 68, 49, 0.045);
+}
+
+.forecast-heading,
+.forecast-heading__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.forecast-heading > div:first-child > span {
+  display: block;
+  color: #678174;
+  font-size: 0.54rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.forecast-heading h3 {
+  margin: 2px 0 0;
+  color: #22362d;
+  font-size: 0.82rem;
+}
+
+.forecast-status {
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: #337052;
+  background: #e5f3eb;
+  font-size: 0.55rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.forecast-panel--insufficient .forecast-status {
+  color: #65766e;
+  background: #edf1ef;
+}
+
+.forecast-panel--watch .forecast-status {
+  color: #846b20;
+  background: #f8edc8;
+}
+
+.forecast-panel--risk .forecast-status {
+  color: #a4453e;
+  background: #f8e2df;
+}
+
+.forecast-heading__actions button {
+  padding: 4px 7px;
+  border: 1px solid #c9d9d0;
+  border-radius: 7px;
+  color: #35664f;
+  background: #fff;
+  font-family: inherit;
+  font-size: 0.55rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.forecast-heading__actions button:hover,
+.forecast-heading__actions button:focus-visible {
+  border-color: #6f9b84;
+  background: #f3f8f5;
+}
+
+.forecast-heading__actions button:focus-visible {
+  outline: 3px solid rgba(41, 116, 79, 0.28);
+  outline-offset: 1px;
+}
+
+.forecast-heading__actions .forecast-privacy {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+}
+
+.forecast-privacy svg {
+  width: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.forecast-metrics .salary-amount > span {
+  min-height: 0;
+  color: inherit;
+  font: inherit;
+  transition: filter 0.18s ease;
+}
+
+.forecast-metrics .salary-amount > .is-blurred {
+  filter: blur(5px);
+  user-select: none;
+}
+
+.forecast-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.forecast-metrics article {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #e1e9e4;
+  border-radius: 10px;
+  background: rgba(248, 251, 249, 0.92);
+}
+
+.forecast-metrics span,
+.forecast-metrics strong,
+.forecast-metrics small {
+  display: block;
+}
+
+.forecast-metrics span {
+  min-height: 2.6em;
+  color: #74847c;
+  font-size: 0.57rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.forecast-metrics strong {
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+  color: #244d3a;
+  font-family: 'Manrope', 'Noto Sans Thai', sans-serif;
+  font-size: 0.75rem;
+  line-height: 1.25;
+}
+
+.forecast-metrics strong.is-negative {
+  color: #bd4c44;
+}
+
+.forecast-metrics small {
+  margin-top: 4px;
+  color: #8b9690;
+  font-size: 0.5rem;
+  line-height: 1.35;
+}
+
+.forecast-advice {
+  margin: 0;
+  padding: 9px 11px;
+  border-left: 3px solid #55a278;
+  border-radius: 4px 9px 9px 4px;
+  color: #3f5e50;
+  background: #edf7f1;
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.forecast-panel--watch .forecast-advice {
+  border-left-color: #d0a52c;
+  color: #74601f;
+  background: #fff8df;
+}
+
+.forecast-panel--risk .forecast-advice {
+  border-left-color: #ce5c53;
+  color: #88443e;
+  background: #fff0ee;
+}
+
+.forecast-panel footer {
+  color: #929d97;
+  font-size: 0.48rem;
+  line-height: 1.4;
+}
+
+.compact-buddy .forecast-panel {
+  gap: 8px;
+  margin-top: 5px;
+  padding: 11px;
+  border-radius: 12px;
+}
+
+.compact-buddy .forecast-heading {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.compact-buddy .forecast-heading h3 {
+  font-size: 0.72rem;
+}
+
+.compact-buddy .forecast-heading__actions {
+  gap: 5px;
+}
+
+.compact-buddy .forecast-metrics {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.compact-buddy .forecast-metrics article {
+  padding: 8px;
+}
+
+.compact-buddy .forecast-metrics span {
+  min-height: 0;
+  font-size: 0.51rem;
+}
+
+.compact-buddy .forecast-metrics strong {
+  font-size: 0.65rem;
+}
+
+.compact-buddy .forecast-metrics small {
+  font-size: 0.46rem;
+}
+
+.compact-buddy .forecast-advice {
+  padding: 8px 9px;
   font-size: 0.55rem;
 }
 

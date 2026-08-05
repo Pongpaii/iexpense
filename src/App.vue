@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import type { Session } from '@supabase/supabase-js'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import AuthGate from './components/AuthGate.vue'
 import CashFlowChart from './components/CashFlowChart.vue'
 import EditTransactionModal from './components/EditTransactionModal.vue'
 import ExpenseAnalytics from './components/ExpenseAnalytics.vue'
@@ -25,6 +27,10 @@ const pageFromHash = (): AppPage =>
   window.location.hash === '#overview' ? 'overview' : 'record'
 
 const transactions = ref<Transaction[]>([])
+const session = ref<Session | null>(null)
+const authReady = ref(!isSupabaseConfigured)
+const authError = ref('')
+const signingOut = ref(false)
 const editingTransaction = ref<Transaction | null>(null)
 const formVersion = ref(0)
 const loading = ref(false)
@@ -43,6 +49,9 @@ const todayDate = toLocalIsoDate(new Date())
 const selectedOverviewMonth = ref(todayDate.slice(0, 7))
 const selectedRecordDate = ref(todayDate)
 let undoTimer: ReturnType<typeof window.setTimeout> | undefined
+let unsubscribeAuth: (() => void) | undefined
+
+const currentUserId = () => session.value?.user.id ?? null
 
 const recordTransactions = computed(() =>
   transactions.value.filter(({ transaction_date }) => transaction_date === selectedRecordDate.value),
@@ -92,7 +101,20 @@ const sumTransactions = (items: Transaction[], type: TransactionType) =>
 
 const income = computed(() => sumTransactions(filteredTransactions.value, 'income'))
 const expense = computed(() => sumTransactions(filteredTransactions.value, 'expense'))
-const balance = computed(() => income.value - expense.value)
+const openingBalance = computed(() => {
+  if (viewMode.value !== 'month' || !/^\d{4}-\d{2}$/.test(selectedOverviewMonth.value)) return 0
+
+  const monthStart = `${selectedOverviewMonth.value}-01`
+  const transactionsBeforeMonth = transactions.value.filter(
+    ({ transaction_date }) => transaction_date < monthStart,
+  )
+
+  return (
+    sumTransactions(transactionsBeforeMonth, 'income') -
+    sumTransactions(transactionsBeforeMonth, 'expense')
+  )
+})
+const balance = computed(() => openingBalance.value + income.value - expense.value)
 
 const recordIncome = computed(() => sumTransactions(recordTransactions.value, 'income'))
 const recordExpense = computed(() => sumTransactions(recordTransactions.value, 'expense'))
@@ -176,7 +198,11 @@ const offerUndo = (transaction: Transaction) => {
 }
 
 const loadTransactions = async () => {
-  if (!supabase) return
+  const userId = currentUserId()
+  if (!supabase || !userId) {
+    transactions.value = []
+    return
+  }
 
   loading.value = true
   errorMessage.value = ''
@@ -184,6 +210,7 @@ const loadTransactions = async () => {
   const { data, error } = await supabase
     .from('transactions')
     .select('*')
+    .eq('user_id', userId)
     .order('transaction_date', { ascending: false })
     .order('created_at', { ascending: false })
 
@@ -197,14 +224,19 @@ const loadTransactions = async () => {
 }
 
 const saveTransaction = async (input: TransactionInput) => {
-  if (!supabase) return
+  const userId = currentUserId()
+  if (!supabase || !userId) return
 
   saving.value = true
   errorMessage.value = ''
 
   const query = editingTransaction.value
-    ? supabase.from('transactions').update(input).eq('id', editingTransaction.value.id)
-    : supabase.from('transactions').insert(input)
+    ? supabase
+        .from('transactions')
+        .update(input)
+        .eq('id', editingTransaction.value.id)
+        .eq('user_id', userId)
+    : supabase.from('transactions').insert({ ...input, user_id: userId })
 
   const { error } = await query
 
@@ -225,12 +257,21 @@ const editTransaction = (transaction: Transaction) => {
 }
 
 const deleteTransaction = async (transaction: Transaction) => {
-  if (!supabase || !window.confirm(`ต้องการลบ “${transaction.description}” ใช่หรือไม่?`)) return
+  const userId = currentUserId()
+  if (
+    !supabase ||
+    !userId ||
+    !window.confirm(`ต้องการลบ “${transaction.description}” ใช่หรือไม่?`)
+  ) return
 
   busyId.value = transaction.id
   errorMessage.value = ''
 
-  const { error } = await supabase.from('transactions').delete().eq('id', transaction.id)
+  const { error } = await supabase
+    .from('transactions')
+    .delete()
+    .eq('id', transaction.id)
+    .eq('user_id', userId)
 
   if (error) {
     errorMessage.value = `ลบข้อมูลไม่สำเร็จ: ${error.message}`
@@ -244,13 +285,15 @@ const deleteTransaction = async (transaction: Transaction) => {
 }
 
 const undoDelete = async () => {
-  if (!supabase || !deletedTransaction.value) return
+  const userId = currentUserId()
+  if (!supabase || !userId || !deletedTransaction.value) return
 
   const transaction = deletedTransaction.value
   undoBusy.value = true
   errorMessage.value = ''
 
   const { error } = await supabase.from('transactions').insert({
+    user_id: userId,
     description: transaction.description,
     amount: transaction.amount,
     type: transaction.type,
@@ -278,8 +321,10 @@ const startSelectionMode = async () => {
 }
 
 const deleteSelectedTransactions = async (ids: number[]) => {
+  const userId = currentUserId()
   if (
     !supabase ||
+    !userId ||
     ids.length === 0 ||
     !window.confirm(`ยืนยันลบธุรกรรมที่เลือก ${ids.length} รายการ? การดำเนินการนี้ย้อนกลับไม่ได้`)
   ) return
@@ -288,7 +333,11 @@ const deleteSelectedTransactions = async (ids: number[]) => {
   bulkBusy.value = true
   errorMessage.value = ''
 
-  const { error } = await supabase.from('transactions').delete().in('id', ids)
+  const { error } = await supabase
+    .from('transactions')
+    .delete()
+    .eq('user_id', userId)
+    .in('id', ids)
 
   if (error) {
     errorMessage.value = `ลบรายการที่เลือกไม่สำเร็จ: ${error.message}`
@@ -306,13 +355,17 @@ const deleteSelectedTransactions = async (ids: number[]) => {
 }
 
 const resetAllTransactions = async () => {
-  if (!supabase || transactions.value.length === 0) return
+  const userId = currentUserId()
+  if (!supabase || !userId || transactions.value.length === 0) return
 
   clearUndo()
   bulkBusy.value = true
   errorMessage.value = ''
 
-  const { error } = await supabase.from('transactions').delete().gt('id', 0)
+  const { error } = await supabase
+    .from('transactions')
+    .delete()
+    .eq('user_id', userId)
 
   if (error) {
     errorMessage.value = `รีเซ็ตข้อมูลไม่สำเร็จ: ${error.message}`
@@ -327,19 +380,105 @@ const resetAllTransactions = async () => {
   bulkBusy.value = false
 }
 
+const clearAuthenticatedState = () => {
+  clearUndo()
+  transactions.value = []
+  editingTransaction.value = null
+  selectionMode.value = false
+  settingsOpen.value = false
+  loading.value = false
+  saving.value = false
+  bulkBusy.value = false
+  undoBusy.value = false
+  busyId.value = null
+  errorMessage.value = ''
+  successMessage.value = ''
+  formVersion.value += 1
+}
+
+const initializeAuth = async () => {
+  if (!supabase) {
+    authReady.value = true
+    return
+  }
+
+  authReady.value = false
+  authError.value = ''
+
+  try {
+    const { data, error } = await supabase.auth.getSession()
+    if (error) throw error
+
+    session.value = data.session
+    if (data.session) await loadTransactions()
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      const previousUserId = session.value?.user.id
+      const nextUserId = nextSession?.user.id
+      session.value = nextSession
+      authError.value = ''
+
+      if (!nextSession) {
+        clearAuthenticatedState()
+      } else if (nextUserId !== previousUserId) {
+        clearAuthenticatedState()
+        window.setTimeout(() => void loadTransactions(), 0)
+      }
+    })
+
+    unsubscribeAuth = () => authListener.subscription.unsubscribe()
+  } catch (error) {
+    session.value = null
+    authError.value = error instanceof Error
+      ? error.message
+      : 'ตรวจสอบสถานะการเข้าสู่ระบบไม่สำเร็จ'
+  } finally {
+    authReady.value = true
+  }
+}
+
+const signOut = async () => {
+  if (!supabase || signingOut.value) return
+
+  signingOut.value = true
+  errorMessage.value = ''
+  const { error } = await supabase.auth.signOut()
+
+  if (error) {
+    errorMessage.value = `ออกจากระบบไม่สำเร็จ: ${error.message}`
+  } else {
+    session.value = null
+    clearAuthenticatedState()
+  }
+
+  signingOut.value = false
+}
+
 onMounted(() => {
   window.addEventListener('hashchange', syncPageFromHash)
-  loadTransactions()
+  void initializeAuth()
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('hashchange', syncPageFromHash)
   window.clearTimeout(undoTimer)
+  unsubscribeAuth?.()
+
 })
 </script>
 
 <template>
-  <div class="app-shell">
+  <main v-if="!authReady" class="auth-loading-page" role="status" aria-live="polite">
+    <div class="auth-loading-card">
+      <span class="auth-loading-spinner" aria-hidden="true"></span>
+      <strong>กำลังตรวจสอบการเข้าสู่ระบบ</strong>
+      <small>รอสักครู่นะ</small>
+    </div>
+  </main>
+
+  <AuthGate v-else-if="!session" :initial-error="authError" />
+
+  <div v-else class="app-shell">
     <header class="topbar">
       <nav class="navbar container">
         <a class="brand" href="#record" aria-label="Money Flow หน้าจดรายการ" @click="activePage = 'record'">
@@ -357,10 +496,26 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="nav-actions">
-          <span class="connection-badge" :class="{ connected: isSupabaseConfigured }">
+          <span class="connection-badge connected" :title="session?.user.email ?? 'เข้าสู่ระบบแล้ว'">
             <span class="connection-dot"></span>
-            {{ isSupabaseConfigured ? 'Supabase พร้อมใช้งาน' : 'รอการเชื่อมต่อ' }}
+            <span class="account-copy">
+              <small>เข้าสู่ระบบแล้ว</small>
+              <b>{{ session?.user.email ?? 'บัญชีผู้ใช้' }}</b>
+            </span>
           </span>
+          <button
+            class="logout-trigger"
+            type="button"
+            :disabled="signingOut"
+            :aria-label="signingOut ? 'กำลังออกจากระบบ' : 'ออกจากระบบ'"
+            title="ออกจากระบบ"
+            @click="signOut"
+          >
+            <span v-if="signingOut" class="logout-spinner" aria-hidden="true"></span>
+            <svg v-else viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M10 5H6.5A1.5 1.5 0 0 0 5 6.5v11A1.5 1.5 0 0 0 6.5 19H10M14 8l4 4-4 4M9 12h9" />
+            </svg>
+          </button>
           <button class="settings-trigger" type="button" aria-label="เปิดการตั้งค่า" @click="settingsOpen = true">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 8.7a3.3 3.3 0 1 0 0 6.6 3.3 3.3 0 0 0 0-6.6Z" />
@@ -462,7 +617,9 @@ onBeforeUnmount(() => {
             :income="allIncome"
             :expense="allExpense"
             :balance="allBalance"
+            :transactions="transactions"
             scope-label="เงินทั้งหมด"
+            @edit-salary="settingsOpen = true"
           />
         </div>
       </section>
@@ -504,7 +661,7 @@ onBeforeUnmount(() => {
             :balance="balance"
             :income="income"
             :expense="expense"
-            :balance-label="viewMode === 'month' ? 'สุทธิของเดือน' : 'ยอดคงเหลือทั้งหมด'"
+            :balance-label="viewMode === 'month' ? 'ยอดคงเหลือสะสม' : 'ยอดคงเหลือทั้งหมด'"
             :income-label="viewMode === 'month' ? 'รายรับของเดือน' : 'รายรับทั้งหมด'"
             :expense-label="viewMode === 'month' ? 'รายจ่ายของเดือน' : 'รายจ่ายทั้งหมด'"
           />
@@ -559,6 +716,46 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.auth-loading-page {
+  display: grid;
+  min-height: 100vh;
+  min-height: 100dvh;
+  place-items: center;
+  padding: 24px;
+  color: #fff;
+  background: linear-gradient(145deg, #153d30, #1d5a43 58%, #286b4f);
+  font-family: 'Noto Sans Thai', sans-serif;
+}
+
+.auth-loading-card {
+  display: grid;
+  min-width: min(300px, 100%);
+  justify-items: center;
+  gap: 7px;
+  padding: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 20px 55px rgba(7, 28, 19, 0.2);
+}
+
+.auth-loading-card strong { font-size: 0.82rem; }
+.auth-loading-card small { color: rgba(255, 255, 255, 0.62); font-size: 0.64rem; }
+
+.auth-loading-spinner {
+  width: 28px;
+  height: 28px;
+  margin-bottom: 5px;
+  border: 3px solid rgba(255, 255, 255, 0.25);
+  border-top-color: var(--lime);
+  border-radius: 50%;
+  animation: auth-spin 0.75s linear infinite;
+}
+
+@keyframes auth-spin {
+  to { transform: rotate(360deg); }
+}
+
 .app-shell {
   min-height: 100vh;
 }
@@ -613,6 +810,77 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.nav-actions .connection-badge {
+  max-width: 210px;
+  padding: 5px 9px;
+  border-radius: 10px;
+}
+
+.account-copy {
+  display: grid;
+  min-width: 0;
+  line-height: 1.15;
+}
+
+.account-copy small {
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 0.45rem;
+  font-weight: 600;
+}
+
+.account-copy b {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logout-trigger {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.17);
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.78);
+  background: rgba(255, 255, 255, 0.07);
+  transition: color 0.2s, background 0.2s;
+}
+
+.logout-trigger:hover:not(:disabled) {
+  color: #194d3b;
+  background: #f1d5d1;
+}
+
+.logout-trigger:focus-visible,
+.settings-trigger:focus-visible {
+  outline: 3px solid rgba(201, 240, 108, 0.45);
+  outline-offset: 2px;
+}
+
+.logout-trigger svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.logout-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: auth-spin 0.7s linear infinite;
 }
 
 .settings-trigger {
