@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
+import { describeAuthError } from '../utils/authErrors'
 
 const props = defineProps<{
   initialError?: string
@@ -10,14 +11,53 @@ const emit = defineEmits<{
   demo: []
 }>()
 
+type AuthMode = 'signIn' | 'forgot'
+
+const mode = ref<AuthMode>('signIn')
 const email = ref('')
+const password = ref('')
+const showPassword = ref(false)
 const loading = ref(false)
-const sent = ref(false)
+const resetSent = ref(false)
 const errorMessage = ref('')
 
 const displayedError = computed(() => errorMessage.value || props.initialError || '')
+const canSubmitSignIn = computed(() => Boolean(email.value.trim() && password.value))
+
+const clearFeedback = () => {
+  errorMessage.value = ''
+}
+
+const switchMode = (next: AuthMode) => {
+  mode.value = next
+  resetSent.value = false
+  errorMessage.value = ''
+  if (next === 'forgot') password.value = ''
+}
 
 const signIn = async () => {
+  if (!supabase) {
+    errorMessage.value = 'ยังไม่ได้ตั้งค่า Supabase กรุณาตรวจสอบ Environment Variables'
+    return
+  }
+  if (!canSubmitSignIn.value || loading.value) return
+
+  loading.value = true
+  errorMessage.value = ''
+
+  const { error } = await supabase.auth.signInWithPassword({
+    email: email.value.trim(),
+    password: password.value,
+  })
+
+  // ไม่บอกว่าอีเมลมีอยู่จริงหรือไม่ เพื่อไม่ให้ใช้หน้านี้ไล่เดาว่าใครสมัครไว้
+  if (error) errorMessage.value = describeAuthError(error.message)
+  else password.value = ''
+
+  loading.value = false
+}
+
+const sendResetLink = async () => {
   if (!supabase) {
     errorMessage.value = 'ยังไม่ได้ตั้งค่า Supabase กรุณาตรวจสอบ Environment Variables'
     return
@@ -29,30 +69,15 @@ const signIn = async () => {
   loading.value = true
   errorMessage.value = ''
 
-  try {
-    const redirectUrl = new URL(import.meta.env.BASE_URL, window.location.origin).toString()
-    const { error } = await supabase.auth.signInWithOtp({
-      email: normalizedEmail,
-      options: {
-        shouldCreateUser: false,
-        emailRedirectTo: redirectUrl,
-      },
-    })
+  const redirectUrl = new URL(import.meta.env.BASE_URL, window.location.origin).toString()
+  const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+    redirectTo: redirectUrl,
+  })
 
-    if (error) throw error
-    sent.value = true
-  } catch (error) {
-    errorMessage.value = error instanceof Error
-      ? error.message
-      : 'ส่งลิงก์เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่'
-  } finally {
-    loading.value = false
-  }
-}
+  if (error) errorMessage.value = describeAuthError(error.message)
+  else resetSent.value = true
 
-const requestAnotherLink = () => {
-  sent.value = false
-  errorMessage.value = ''
+  loading.value = false
 }
 </script>
 
@@ -61,7 +86,7 @@ const requestAnotherLink = () => {
     <section class="auth-card" aria-labelledby="auth-title">
       <div class="auth-brand" aria-hidden="true">฿</div>
       <span class="auth-kicker">Money Flow</span>
-      <h1 id="auth-title">ยินดีต้อนรับกลับ</h1>
+      <h1 id="auth-title">{{ mode === 'forgot' ? 'ตั้งรหัสผ่านใหม่' : 'ยินดีต้อนรับกลับ' }}</h1>
 
       <template v-if="!isSupabaseConfigured">
         <p class="auth-description">
@@ -69,23 +94,21 @@ const requestAnotherLink = () => {
         </p>
       </template>
 
-      <template v-else-if="sent">
+      <template v-else-if="resetSent">
         <div class="mail-sent" role="status" aria-live="polite">
           <span aria-hidden="true">✓</span>
           <div>
-            <strong>ส่ง Magic Link แล้ว</strong>
-            <p>เปิดอีเมล <b>{{ email.trim() }}</b> แล้วกดลิงก์เพื่อเข้าสู่ระบบ</p>
+            <strong>ส่งลิงก์ตั้งรหัสผ่านแล้ว</strong>
+            <p>เปิดอีเมล <b>{{ email.trim() }}</b> แล้วกดลิงก์เพื่อตั้งรหัสผ่านใหม่</p>
           </div>
         </div>
-        <button class="secondary-button" type="button" @click="requestAnotherLink">
-          ส่งไปยังอีเมลอื่น
+        <button class="secondary-button" type="button" @click="switchMode('signIn')">
+          กลับไปหน้าเข้าสู่ระบบ
         </button>
       </template>
 
-      <form v-else class="auth-form" @submit.prevent="signIn">
-        <p class="auth-description">
-          กรอกอีเมลที่ลงทะเบียนใน Supabase ระบบจะส่งลิงก์สำหรับเข้าสู่ระบบให้คุณ
-        </p>
+      <form v-else-if="mode === 'signIn'" class="auth-form" @submit.prevent="signIn">
+        <p class="auth-description">กรอกอีเมลและรหัสผ่านของบัญชีที่สร้างไว้</p>
 
         <label for="auth-email">
           <span>อีเมล</span>
@@ -98,7 +121,64 @@ const requestAnotherLink = () => {
             placeholder="you@example.com"
             required
             :disabled="loading"
-            @input="errorMessage = ''"
+            @input="clearFeedback"
+          />
+        </label>
+
+        <label for="auth-password">
+          <span>รหัสผ่าน</span>
+          <span class="password-field">
+            <input
+              id="auth-password"
+              v-model="password"
+              :type="showPassword ? 'text' : 'password'"
+              autocomplete="current-password"
+              placeholder="••••••••"
+              required
+              :disabled="loading"
+              @input="clearFeedback"
+            />
+            <button
+              type="button"
+              :aria-label="showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'"
+              :aria-pressed="showPassword"
+              :disabled="loading"
+              @click="showPassword = !showPassword"
+            >
+              {{ showPassword ? 'ซ่อน' : 'แสดง' }}
+            </button>
+          </span>
+        </label>
+
+        <p v-if="displayedError" class="auth-error" role="alert">{{ displayedError }}</p>
+
+        <button class="primary-button" type="submit" :disabled="loading || !canSubmitSignIn">
+          <span v-if="loading" class="auth-spinner" aria-hidden="true"></span>
+          {{ loading ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ' }}
+        </button>
+
+        <button class="text-button" type="button" :disabled="loading" @click="switchMode('forgot')">
+          ลืมรหัสผ่าน?
+        </button>
+      </form>
+
+      <form v-else class="auth-form" @submit.prevent="sendResetLink">
+        <p class="auth-description">
+          กรอกอีเมลของบัญชี ระบบจะส่งลิงก์ให้ตั้งรหัสผ่านใหม่
+        </p>
+
+        <label for="reset-email">
+          <span>อีเมล</span>
+          <input
+            id="reset-email"
+            v-model="email"
+            type="email"
+            autocomplete="email"
+            inputmode="email"
+            placeholder="you@example.com"
+            required
+            :disabled="loading"
+            @input="clearFeedback"
           />
         </label>
 
@@ -106,7 +186,11 @@ const requestAnotherLink = () => {
 
         <button class="primary-button" type="submit" :disabled="loading || !email.trim()">
           <span v-if="loading" class="auth-spinner" aria-hidden="true"></span>
-          {{ loading ? 'กำลังส่งลิงก์...' : 'รับ Magic Link' }}
+          {{ loading ? 'กำลังส่งลิงก์...' : 'ส่งลิงก์ตั้งรหัสผ่าน' }}
+        </button>
+
+        <button class="text-button" type="button" :disabled="loading" @click="switchMode('signIn')">
+          กลับไปเข้าสู่ระบบด้วยรหัสผ่าน
         </button>
       </form>
 
@@ -194,13 +278,14 @@ h1 {
   text-align: left;
 }
 
-.auth-form label > span {
+.auth-form label > span:first-child {
   color: #3c5e4f;
   font-size: 0.68rem;
   font-weight: 700;
 }
 
 .auth-form input {
+  width: 100%;
   min-height: 48px;
   padding: 10px 13px;
   border: 1px solid #d2ded7;
@@ -215,6 +300,36 @@ h1 {
 .auth-form input:focus {
   border-color: #5b9577;
   box-shadow: 0 0 0 4px rgba(64, 137, 99, 0.13);
+}
+
+.password-field {
+  position: relative;
+  display: block;
+}
+
+.password-field input {
+  padding-right: 62px;
+}
+
+.password-field button {
+  position: absolute;
+  right: 7px;
+  top: 50%;
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 1px solid #d7e2dc;
+  border-radius: 8px;
+  color: #38614c;
+  background: #fff;
+  font-family: 'Noto Sans Thai', sans-serif;
+  font-size: 0.6rem;
+  font-weight: 700;
+  transform: translateY(-50%);
+}
+
+.password-field button:hover:not(:disabled) {
+  border-color: #a7c3b3;
+  background: #f4faf6;
 }
 
 .primary-button,
@@ -248,6 +363,27 @@ h1 {
   opacity: 0.55;
 }
 
+.text-button {
+  margin-top: 2px;
+  padding: 6px;
+  border: 0;
+  border-radius: 8px;
+  color: #45715c;
+  background: transparent;
+  font-family: 'Noto Sans Thai', sans-serif;
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.text-button:hover:not(:disabled) {
+  color: #22513c;
+}
+
+.text-button:disabled {
+  opacity: 0.55;
+}
+
 .auth-error {
   margin: 3px 0 0;
   padding: 9px 11px;
@@ -255,6 +391,7 @@ h1 {
   color: #a13c36;
   background: #fff0ee;
   font-size: 0.66rem;
+  line-height: 1.55;
   text-align: left;
 }
 

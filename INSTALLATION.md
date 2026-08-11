@@ -61,13 +61,26 @@ VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
 
 ## 5. สร้างผู้ใช้
 
-แอปใช้การล็อกอินแบบ Magic Link และ **ไม่เปิดให้สมัครสมาชิกเอง** (`shouldCreateUser: false`) จึงต้องสร้างผู้ใช้ก่อน:
+แอปใช้การล็อกอินด้วย **อีเมล + รหัสผ่าน** และ **ไม่เปิดให้สมัครสมาชิกเอง** จึงต้องสร้างผู้ใช้จากฝั่งผู้ดูแลก่อน
 
-Supabase Dashboard → Authentication → Users → **Add user** → ใส่อีเมล
+Supabase Dashboard → Authentication → Users → **Add user** → ใส่อีเมลและรหัสผ่าน แล้วติ๊ก Auto Confirm User
+เพื่อไม่ต้องรอยืนยันอีเมล
 
-จากนั้นไปที่ Authentication → URL Configuration แล้วเพิ่ม Site URL / Redirect URL ให้ตรงกับที่ใช้งาน เช่น
-- `http://localhost:5173` สำหรับตอนพัฒนา
-- โดเมนจริงของคุณสำหรับ production
+ตั้งค่าที่ควรตรวจในโปรเจกต์ Supabase
+- Authentication → Sign In / Providers → เปิด **Email** และปิด **Allow new users to sign up** (แอปไม่เรียก `signUp` อยู่แล้ว
+  ปิดไว้อีกชั้นเพื่อกันคนสมัครเองผ่าน API)
+- Authentication → URL Configuration → เพิ่ม Site URL และ Redirect URLs ให้ตรงกับที่ใช้งาน เช่น
+  `http://localhost:5173` สำหรับตอนพัฒนา และโดเมนจริงสำหรับ production
+  (ลิงก์ตั้งรหัสผ่านใหม่จะเด้งกลับมาที่ URL เหล่านี้)
+
+### ผู้ใช้เดิมที่เคยใช้ Magic Link
+บัญชีที่สร้างไว้สำหรับ Magic Link จะยังไม่มีรหัสผ่าน เข้าสู่ระบบด้วยรหัสผ่านจะไม่ผ่าน แก้ได้สองทาง
+1. Dashboard → Authentication → Users → เลือกผู้ใช้ → ตั้งรหัสผ่านให้
+2. ที่หน้าเข้าสู่ระบบกด **ลืมรหัสผ่าน?** เพื่อรับลิงก์ตั้งรหัสผ่านใหม่ทางอีเมล
+
+### ลืมรหัสผ่าน
+กด "ลืมรหัสผ่าน?" → ระบบส่งลิงก์ทางอีเมล → กดลิงก์แล้วแอปจะแสดงหน้าตั้งรหัสผ่านใหม่ (ยาวอย่างน้อย 8 ตัวอักษร)
+การส่งอีเมลใช้โควตาของ Supabase ซึ่งจำกัด 2 ฉบับต่อชั่วโมงถ้ายังไม่ได้ตั้ง custom SMTP
 
 ## 6. รันแอป
 
@@ -120,7 +133,11 @@ node "C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js" run dev
 **ขึ้นว่า "ยังไม่ได้เชื่อมฐานข้อมูล"**
 `.env` ไม่มีค่า หรือแก้ `.env` แล้วยังไม่ได้รีสตาร์ท dev server (Vite อ่าน env ตอนบูตเท่านั้น)
 
-**กด Magic Link แล้วเด้งกลับหน้าล็อกอิน**
+**ขึ้นว่า "อีเมลหรือรหัสผ่านไม่ถูกต้อง" ทั้งที่มั่นใจว่าถูก**
+บัญชีนั้นอาจยังไม่มีรหัสผ่าน (เคยใช้ Magic Link) หรือยังไม่ยืนยันอีเมล ตั้งรหัสผ่านให้จาก Dashboard
+หรือใช้ปุ่มลืมรหัสผ่าน
+
+**กดลิงก์ตั้งรหัสผ่านแล้วเด้งกลับหน้าล็อกอิน**
 Redirect URL ใน Supabase ไม่ตรงกับ origin ที่เปิดเว็บ ตรวจที่ Authentication → URL Configuration
 
 **ล็อกอินได้แต่ไม่เห็นข้อมูล / บันทึกไม่ได้**
@@ -132,18 +149,22 @@ Redirect URL ใน Supabase ไม่ตรงกับ origin ที่เป�
 src/
   App.vue                  หน้าหลัก จัดการ state, auth, โหมด demo
   components/
-    AuthGate.vue           หน้าล็อกอิน + ปุ่มเข้าโหมด demo
+    AuthGate.vue           หน้าล็อกอินด้วยอีเมล+รหัสผ่าน, ลืมรหัสผ่าน, ปุ่มเข้าโหมด demo
+    PasswordResetScreen.vue หน้าตั้งรหัสผ่านใหม่ เปิดจากลิงก์ในอีเมล
     TransactionForm.vue    ฟอร์มบันทึกรายการ
     TransactionList.vue    รายการธุรกรรม (รองรับโหมดอ่านอย่างเดียว)
     SummaryCards.vue       การ์ดสรุปยอด
     CashFlowChart.vue      กราฟแท่งรายรับ-รายจ่าย 6 เดือน
     CategoryDonut.vue      กราฟวงกลมแยกหมวดหมู่ กดดูรายการในแต่ละ % ได้
+    BubbleGalaxy.vue       แท็บฟองเงิน ทุกรายการเป็นฟองลอย กวนด้วยเมาส์ได้
     ExpenseAnalytics.vue   วิเคราะห์รายจ่ายรายเดือน + เทียบเดือนก่อน
     MoneyBuddy.vue         ผู้ช่วยคาดการณ์เงินคงเหลือ
     SettingsModal.vue      ตั้งค่าเงินเดือน / จัดการข้อมูล
   utils/
     categoryBreakdown.ts   รวมยอดตามหมวดหมู่ให้กราฟวงกลม
     demoData.ts            ชุดข้อมูลตัวอย่างของโหมด demo
+    authErrors.ts          แปล error ของ Supabase Auth เป็นภาษาไทย
+    bubbleField.ts         ฟิสิกส์ของฟองเงิน (แยกออกมาให้ทดสอบได้)
     forecast.ts, format.ts
   lib/supabase.ts          สร้าง Supabase client จาก env
 supabase/schema.sql        สคริปต์สร้างตารางและ RLS

@@ -8,6 +8,7 @@ import CategoryDonut from './components/CategoryDonut.vue'
 import EditTransactionModal from './components/EditTransactionModal.vue'
 import ExpenseAnalytics from './components/ExpenseAnalytics.vue'
 import MoneyBuddy from './components/MoneyBuddy.vue'
+import PasswordResetScreen from './components/PasswordResetScreen.vue'
 import SettingsModal from './components/SettingsModal.vue'
 import SummaryCards from './components/SummaryCards.vue'
 import TransactionForm from './components/TransactionForm.vue'
@@ -50,6 +51,8 @@ const selectionMode = ref(false)
 const deletedTransaction = ref<Transaction | null>(null)
 const undoBusy = ref(false)
 const demoMode = ref(false)
+/** true เมื่อผู้ใช้เข้ามาจากลิงก์ตั้งรหัสผ่านใหม่ ต้องให้ตั้งรหัสก่อนใช้งานต่อ */
+const passwordRecovery = ref(false)
 const activePage = ref<AppPage>(pageFromHash())
 const viewMode = ref<ViewMode>('month')
 const todayDate = toLocalIsoDate(new Date())
@@ -449,7 +452,8 @@ const initializeAuth = async () => {
     session.value = data.session
     if (data.session) await loadTransactions()
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (event === 'PASSWORD_RECOVERY') passwordRecovery.value = true
       const previousUserId = session.value?.user.id
       const nextUserId = nextSession?.user.id
       session.value = nextSession
@@ -473,6 +477,19 @@ const initializeAuth = async () => {
   } finally {
     authReady.value = true
   }
+}
+
+const finishPasswordRecovery = () => {
+  passwordRecovery.value = false
+  showMessage('ตั้งรหัสผ่านใหม่เรียบร้อยแล้ว ครั้งต่อไปใช้รหัสนี้เข้าสู่ระบบได้เลย')
+  if (session.value) {
+    void loadTransactions()
+  }
+}
+
+const cancelPasswordRecovery = async () => {
+  passwordRecovery.value = false
+  await signOut()
 }
 
 const signOut = async () => {
@@ -513,6 +530,12 @@ onBeforeUnmount(() => {
       <small>รอสักครู่นะ</small>
     </div>
   </main>
+
+  <PasswordResetScreen
+    v-else-if="passwordRecovery"
+    @done="finishPasswordRecovery"
+    @cancel="cancelPasswordRecovery"
+  />
 
   <AuthGate
     v-else-if="!session && !demoMode"
