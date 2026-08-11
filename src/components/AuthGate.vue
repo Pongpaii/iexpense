@@ -6,6 +6,10 @@ const props = defineProps<{
   initialError?: string
 }>()
 
+const emit = defineEmits<{
+  demo: []
+}>()
+
 const email = ref('')
 const loading = ref(false)
 const sent = ref(false)
@@ -105,6 +109,16 @@ const requestAnotherLink = () => {
           {{ loading ? 'กำลังส่งลิงก์...' : 'รับ Magic Link' }}
         </button>
       </form>
+
+      <div class="demo-divider"><span>หรือ</span></div>
+
+      <button class="demo-button" type="button" @click="emit('demo')">
+        <span aria-hidden="true">👀</span>
+        เข้าดูตัวอย่างแอป (Demo)
+      </button>
+      <p class="demo-note">
+        เข้าไม่ได้ก็ดูได้ ข้อมูลเป็นตัวอย่างสมมติ ดูได้อย่างเดียว เพิ่ม/แก้ไข/ลบไม่ได้
+      </p>
 
       <small>เข้าได้เฉพาะบัญชีที่สร้างไว้แล้ว · ไม่มีการเปิดสมัครสมาชิกใหม่</small>
     </section>
@@ -277,6 +291,59 @@ h1 {
   overflow-wrap: anywhere;
   color: #688075;
   font-size: 0.66rem;
+  line-height: 1.5;
+}
+
+.demo-divider {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0 14px;
+  color: #a3aea8;
+  font-size: 0.6rem;
+  font-weight: 700;
+}
+
+.demo-divider::before,
+.demo-divider::after {
+  content: '';
+  height: 1px;
+  background: #e2e9e5;
+}
+
+.demo-button {
+  display: inline-flex;
+  width: 100%;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 15px;
+  border: 1px solid #cbdad2;
+  border-radius: 11px;
+  color: #285c44;
+  background: #f4faf6;
+  font-family: 'Noto Sans Thai', sans-serif;
+  font-size: 0.74rem;
+  font-weight: 800;
+  transition: border-color 0.16s, background 0.16s;
+}
+
+.demo-button:hover {
+  border-color: #9dc0ac;
+  background: #eaf5ee;
+}
+
+.demo-button:focus-visible {
+  outline: 3px solid rgba(64, 137, 99, 0.28);
+  outline-offset: 2px;
+}
+
+.demo-note {
+  margin: 9px 0 0;
+  color: #8a968f;
+  font-size: 0.6rem;
   line-height: 1.5;
 }
 

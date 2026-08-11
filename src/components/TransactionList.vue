@@ -3,14 +3,18 @@ import { computed, ref, watch } from 'vue'
 import { getCategoryEmoji, type Transaction } from '../types/transaction'
 import { formatBaht, formatDate } from '../utils/format'
 
-const props = defineProps<{
-  transactions: Transaction[]
-  loading: boolean
-  busyId: number | null
-  selectionMode: boolean
-  bulkBusy: boolean
-  emptyHint: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    transactions: Transaction[]
+    loading: boolean
+    busyId: number | null
+    selectionMode: boolean
+    bulkBusy: boolean
+    emptyHint: string
+    readOnly?: boolean
+  }>(),
+  { readOnly: false },
+)
 
 const emit = defineEmits<{
   edit: [transaction: Transaction]
@@ -74,7 +78,10 @@ watch(
           เสร็จสิ้น
         </button>
       </div>
-      <span v-else class="item-count">{{ transactions.length }} รายการ</span>
+      <div v-else class="list-meta">
+        <span v-if="readOnly" class="read-only-chip">ดูอย่างเดียว</span>
+        <span class="item-count">{{ transactions.length }} รายการ</span>
+      </div>
     </div>
 
     <div v-if="selectionMode && transactions.length > 0" class="selection-bar">
@@ -143,7 +150,7 @@ watch(
           <span>{{ transaction.type === 'income' ? 'รายรับ' : 'รายจ่าย' }}</span>
         </div>
 
-        <div v-if="!selectionMode" class="transaction-actions">
+        <div v-if="!selectionMode && !readOnly" class="transaction-actions">
           <button
             class="icon-button"
             type="button"
@@ -189,6 +196,24 @@ watch(
 }
 
 .list-heading { align-items: center; }
+
+.list-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.read-only-chip {
+  padding: 4px 8px;
+  border: 1px solid #e0d7bd;
+  border-radius: 999px;
+  color: #8a7333;
+  background: #fbf5e4;
+  font-family: 'Noto Sans Thai', sans-serif;
+  font-size: 0.55rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
 
 .selection-tools {
   display: flex;

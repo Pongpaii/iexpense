@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import AuthGate from './components/AuthGate.vue'
 import CashFlowChart from './components/CashFlowChart.vue'
+import CategoryDonut from './components/CategoryDonut.vue'
 import EditTransactionModal from './components/EditTransactionModal.vue'
 import ExpenseAnalytics from './components/ExpenseAnalytics.vue'
 import MoneyBuddy from './components/MoneyBuddy.vue'
@@ -12,6 +13,7 @@ import TransactionForm from './components/TransactionForm.vue'
 import TransactionList from './components/TransactionList.vue'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import type { Transaction, TransactionInput, TransactionType } from './types/transaction'
+import { createDemoTransactions, DEMO_USER_EMAIL } from './utils/demoData'
 
 type ViewMode = 'month' | 'all'
 type AppPage = 'record' | 'overview'
@@ -43,6 +45,7 @@ const settingsOpen = ref(false)
 const selectionMode = ref(false)
 const deletedTransaction = ref<Transaction | null>(null)
 const undoBusy = ref(false)
+const demoMode = ref(false)
 const activePage = ref<AppPage>(pageFromHash())
 const viewMode = ref<ViewMode>('month')
 const todayDate = toLocalIsoDate(new Date())
@@ -197,6 +200,31 @@ const offerUndo = (transaction: Transaction) => {
   }, 6500)
 }
 
+const blockedInDemo = () => {
+  if (!demoMode.value) return false
+  errorMessage.value = 'โหมดดูตัวอย่างแก้ไขข้อมูลไม่ได้ เข้าสู่ระบบเพื่อบันทึกรายการจริง'
+  return true
+}
+
+const enterDemoMode = () => {
+  demoMode.value = true
+  errorMessage.value = ''
+  clearUndo()
+  transactions.value = createDemoTransactions()
+  selectedRecordDate.value = todayDate
+  selectedOverviewMonth.value = todayDate.slice(0, 7)
+  viewMode.value = 'month'
+  selectionMode.value = false
+  navigateTo('record')
+  showMessage('เข้าโหมดดูตัวอย่างแล้ว ข้อมูลทั้งหมดเป็นตัวอย่างสมมติ')
+}
+
+const exitDemoMode = () => {
+  demoMode.value = false
+  clearAuthenticatedState()
+  navigateTo('record')
+}
+
 const loadTransactions = async () => {
   const userId = currentUserId()
   if (!supabase || !userId) {
@@ -224,6 +252,7 @@ const loadTransactions = async () => {
 }
 
 const saveTransaction = async (input: TransactionInput) => {
+  if (blockedInDemo()) return
   const userId = currentUserId()
   if (!supabase || !userId) return
 
@@ -253,10 +282,12 @@ const saveTransaction = async (input: TransactionInput) => {
 }
 
 const editTransaction = (transaction: Transaction) => {
+  if (blockedInDemo()) return
   editingTransaction.value = transaction
 }
 
 const deleteTransaction = async (transaction: Transaction) => {
+  if (blockedInDemo()) return
   const userId = currentUserId()
   if (
     !supabase ||
@@ -321,6 +352,7 @@ const startSelectionMode = async () => {
 }
 
 const deleteSelectedTransactions = async (ids: number[]) => {
+  if (blockedInDemo()) return
   const userId = currentUserId()
   if (
     !supabase ||
@@ -355,6 +387,7 @@ const deleteSelectedTransactions = async (ids: number[]) => {
 }
 
 const resetAllTransactions = async () => {
+  if (blockedInDemo()) return
   const userId = currentUserId()
   if (!supabase || !userId || transactions.value.length === 0) return
 
@@ -417,6 +450,7 @@ const initializeAuth = async () => {
       const nextUserId = nextSession?.user.id
       session.value = nextSession
       authError.value = ''
+      if (nextSession) demoMode.value = false
 
       if (!nextSession) {
         clearAuthenticatedState()
@@ -476,9 +510,13 @@ onBeforeUnmount(() => {
     </div>
   </main>
 
-  <AuthGate v-else-if="!session" :initial-error="authError" />
+  <AuthGate
+    v-else-if="!session && !demoMode"
+    :initial-error="authError"
+    @demo="enterDemoMode"
+  />
 
-  <div v-else class="app-shell">
+  <div v-else class="app-shell" :class="{ 'app-shell--demo': demoMode }">
     <header class="topbar">
       <nav class="navbar container">
         <a class="brand" href="#record" aria-label="Money Flow หน้าจดรายการ" @click="activePage = 'record'">
@@ -496,14 +534,31 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="nav-actions">
-          <span class="connection-badge connected" :title="session?.user.email ?? 'เข้าสู่ระบบแล้ว'">
+          <span
+            class="connection-badge"
+            :class="demoMode ? 'demo-badge' : 'connected'"
+            :title="demoMode ? 'โหมดดูตัวอย่าง' : session?.user.email ?? 'เข้าสู่ระบบแล้ว'"
+          >
             <span class="connection-dot"></span>
             <span class="account-copy">
-              <small>เข้าสู่ระบบแล้ว</small>
-              <b>{{ session?.user.email ?? 'บัญชีผู้ใช้' }}</b>
+              <small>{{ demoMode ? 'โหมดดูตัวอย่าง' : 'เข้าสู่ระบบแล้ว' }}</small>
+              <b>{{ demoMode ? DEMO_USER_EMAIL : session?.user.email ?? 'บัญชีผู้ใช้' }}</b>
             </span>
           </span>
           <button
+            v-if="demoMode"
+            class="logout-trigger"
+            type="button"
+            aria-label="ออกจากโหมดดูตัวอย่าง"
+            title="ออกจากโหมดดูตัวอย่าง"
+            @click="exitDemoMode"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M10 5H6.5A1.5 1.5 0 0 0 5 6.5v11A1.5 1.5 0 0 0 6.5 19H10M14 8l4 4-4 4M9 12h9" />
+            </svg>
+          </button>
+          <button
+            v-else
             class="logout-trigger"
             type="button"
             :disabled="signingOut"
@@ -527,7 +582,19 @@ onBeforeUnmount(() => {
     </header>
 
     <main class="container dashboard">
-      <aside v-if="!isSupabaseConfigured" class="setup-notice" role="status">
+      <aside v-if="demoMode" class="demo-banner" role="status">
+        <div class="demo-banner__icon" aria-hidden="true">👀</div>
+        <div class="demo-banner__copy">
+          <strong>กำลังดูตัวอย่างแอป</strong>
+          <p>
+            ข้อมูล 6 เดือนนี้เป็นตัวอย่างสมมติ ลองกดดูกราฟ สลับเดือน และเปิดสัดส่วนหมวดหมู่ได้เต็มที่
+            แต่เพิ่ม แก้ไข หรือลบไม่ได้
+          </p>
+        </div>
+        <button type="button" @click="exitDemoMode">เข้าสู่ระบบ</button>
+      </aside>
+
+      <aside v-else-if="!isSupabaseConfigured" class="setup-notice" role="status">
         <div class="setup-notice__icon">!</div>
         <div>
           <strong>ยังไม่ได้เชื่อมฐานข้อมูล</strong>
@@ -583,7 +650,7 @@ onBeforeUnmount(() => {
             class="dashboard-form"
             :editing="null"
             :busy="saving"
-            :disabled="!isSupabaseConfigured"
+            :disabled="!isSupabaseConfigured || demoMode"
             :default-date="selectedRecordDate"
             @submit="saveTransaction"
           />
@@ -604,11 +671,25 @@ onBeforeUnmount(() => {
               :busy-id="busyId"
               :selection-mode="false"
               :bulk-busy="bulkBusy"
+              :read-only="demoMode"
               :empty-hint="isRecordToday ? 'วันนี้ยังไม่มีรายการ เริ่มจดจากฟอร์มได้เลย' : `${recordDateLabel} ยังไม่มีรายการ`"
               @edit="editTransaction"
               @delete="deleteTransaction"
               @bulk-delete="deleteSelectedTransactions"
               @cancel-selection="selectionMode = false"
+            />
+
+            <CategoryDonut
+              class="donut-card--wide record-donut"
+              :transactions="recordTransactions"
+              type="expense"
+              show-type-toggle
+              eyebrow="Daily breakdown"
+              :title="isRecordToday ? 'สัดส่วนหมวดหมู่วันนี้' : `สัดส่วนหมวดหมู่ ${recordDateLabel}`"
+              :show-item-date="false"
+              :empty-hint="isRecordToday
+                ? 'จดรายการของวันนี้แล้วกราฟวงกลมจะแยกสัดส่วนให้ทันที'
+                : 'ยังไม่มีรายการของวันนั้น เลือกวันอื่นหรือเพิ่มรายการได้เลย'"
             />
           </section>
 
@@ -675,6 +756,7 @@ onBeforeUnmount(() => {
             :busy-id="busyId"
             :selection-mode="selectionMode"
             :bulk-busy="bulkBusy"
+            :read-only="demoMode"
             :empty-hint="emptyListHint"
             @edit="editTransaction"
             @delete="deleteTransaction"
@@ -691,6 +773,17 @@ onBeforeUnmount(() => {
                 :month-label="overviewPeriodLabel"
               />
             </div>
+
+            <CategoryDonut
+              v-else
+              class="overview-donut"
+              :transactions="filteredTransactions"
+              type="expense"
+              show-type-toggle
+              eyebrow="All-time breakdown"
+              title="สัดส่วนหมวดหมู่ทั้งหมด"
+              empty-hint="เมื่อมีรายการในระบบ ระบบจะแยกสัดส่วนตามหมวดหมู่ให้ทันที"
+            />
           </div>
         </div>
         </section>
@@ -708,6 +801,7 @@ onBeforeUnmount(() => {
       :open="settingsOpen"
       :transaction-count="transactions.length"
       :busy="bulkBusy"
+      :read-only="demoMode"
       @close="settingsOpen = false"
       @manage="startSelectionMode"
       @reset="resetAllTransactions"
@@ -1016,7 +1110,8 @@ onBeforeUnmount(() => {
 
 .dashboard-form,
 .record-buddy,
-.record-list {
+.record-list,
+.record-donut {
   min-width: 0;
   height: auto;
 }
@@ -1024,7 +1119,7 @@ onBeforeUnmount(() => {
 .today-column {
   display: grid;
   min-width: 0;
-  grid-template-rows: auto auto;
+  grid-auto-rows: auto;
   gap: 10px;
 }
 
@@ -1145,9 +1240,67 @@ onBeforeUnmount(() => {
 
 .overview-insights,
 .overview-list,
-.overview-chart {
+.overview-chart,
+.overview-donut {
   min-width: 0;
   height: auto;
+}
+
+.demo-banner {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 11px;
+  padding: 11px 13px;
+  border: 1px solid #e5dcc0;
+  border-radius: 13px;
+  background: #fcf8ea;
+  font-family: 'Noto Sans Thai', sans-serif;
+}
+
+.demo-banner__icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 11px;
+  background: #f5eccc;
+  font-size: 1rem;
+}
+
+.demo-banner__copy strong {
+  color: #6f5c22;
+  font-size: 0.74rem;
+}
+
+.demo-banner__copy p {
+  margin: 2px 0 0;
+  color: #8d7c4e;
+  font-size: 0.62rem;
+  line-height: 1.5;
+}
+
+.demo-banner button {
+  min-height: 34px;
+  padding: 7px 13px;
+  border: 1px solid #194d3b;
+  border-radius: 9px;
+  color: #fff;
+  background: #194d3b;
+  font-family: 'Noto Sans Thai', sans-serif;
+  font-size: 0.65rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.demo-badge {
+  border-color: rgba(240, 214, 108, 0.35) !important;
+  background: rgba(240, 214, 108, 0.14) !important;
+}
+
+.demo-badge .connection-dot {
+  background: #f0d66c;
 }
 
 .undo-toast {
@@ -1311,5 +1464,8 @@ onBeforeUnmount(() => {
   .overview-workspace,
   .today-column { gap: 9px; }
   .overview-workspace { margin-top: 9px; }
+  .demo-banner { grid-template-columns: 32px minmax(0, 1fr); }
+  .demo-banner__icon { width: 32px; height: 32px; border-radius: 9px; }
+  .demo-banner button { grid-column: 1 / -1; }
 }
 </style>
