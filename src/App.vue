@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import AuthGate from './components/AuthGate.vue'
 import CashFlowChart from './components/CashFlowChart.vue'
+import BubbleGalaxy from './components/BubbleGalaxy.vue'
 import CategoryDonut from './components/CategoryDonut.vue'
 import EditTransactionModal from './components/EditTransactionModal.vue'
 import ExpenseAnalytics from './components/ExpenseAnalytics.vue'
@@ -16,7 +17,7 @@ import type { Transaction, TransactionInput, TransactionType } from './types/tra
 import { createDemoTransactions, DEMO_USER_EMAIL } from './utils/demoData'
 
 type ViewMode = 'month' | 'all'
-type AppPage = 'record' | 'overview'
+type AppPage = 'record' | 'overview' | 'bubbles'
 
 const toLocalIsoDate = (date: Date) => {
   const year = date.getFullYear()
@@ -25,8 +26,11 @@ const toLocalIsoDate = (date: Date) => {
   return `${year}-${month}-${day}`
 }
 
-const pageFromHash = (): AppPage =>
-  window.location.hash === '#overview' ? 'overview' : 'record'
+const pageFromHash = (): AppPage => {
+  if (window.location.hash === '#overview') return 'overview'
+  if (window.location.hash === '#bubbles') return 'bubbles'
+  return 'record'
+}
 
 const transactions = ref<Transaction[]>([])
 const session = ref<Session | null>(null)
@@ -531,6 +535,9 @@ onBeforeUnmount(() => {
           <button type="button" :class="{ active: activePage === 'overview' }" @click="navigateTo('overview')">
             <span aria-hidden="true">▥</span> ภาพรวม
           </button>
+          <button type="button" :class="{ active: activePage === 'bubbles' }" @click="navigateTo('bubbles')">
+            <span aria-hidden="true">◍</span> ฟองเงิน
+          </button>
         </div>
 
         <div class="nav-actions">
@@ -705,7 +712,7 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-        <section v-else key="overview" class="app-page overview-page">
+        <section v-else-if="activePage === 'overview'" key="overview" class="app-page overview-page">
         <section class="overview-panel" aria-labelledby="overview-title">
           <div class="overview-controls">
             <div class="overview-title">
@@ -786,6 +793,10 @@ onBeforeUnmount(() => {
             />
           </div>
         </div>
+        </section>
+
+        <section v-else key="bubbles" class="app-page bubbles-page">
+          <BubbleGalaxy :transactions="transactions" />
         </section>
       </Transition>
     </main>
