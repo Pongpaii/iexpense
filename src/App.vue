@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Session } from '@supabase/supabase-js'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import AuthGate from './components/AuthGate.vue'
 import CashFlowChart from './components/CashFlowChart.vue'
 import CategoryDonut from './components/CategoryDonut.vue'
@@ -12,14 +12,7 @@ import SummaryCards from './components/SummaryCards.vue'
 import TransactionForm from './components/TransactionForm.vue'
 import TransactionList from './components/TransactionList.vue'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
-import type {
-  SpaceMember,
-  SpaceSummary,
-  Transaction,
-  TransactionInput,
-  TransactionType,
-} from './types/transaction'
-import { matchesSelection, type CategorySelection } from './utils/categoryBreakdown'
+import type { Transaction, TransactionInput, TransactionType } from './types/transaction'
 import { createDemoTransactions, DEMO_USER_EMAIL } from './utils/demoData'
 
 type ViewMode = 'month' | 'all'
@@ -53,15 +46,8 @@ const selectionMode = ref(false)
 const deletedTransaction = ref<Transaction | null>(null)
 const undoBusy = ref(false)
 const demoMode = ref(false)
-const space = ref<SpaceSummary | null>(null)
-const spaceMembers = ref<SpaceMember[]>([])
-const spaceOptions = ref<{ space_id: string; space_name: string }[]>([])
-const spaceBusy = ref(false)
-const spaceError = ref('')
 const activePage = ref<AppPage>(pageFromHash())
 const viewMode = ref<ViewMode>('month')
-const recordFilter = ref<CategorySelection | null>(null)
-const overviewFilter = ref<CategorySelection | null>(null)
 const todayDate = toLocalIsoDate(new Date())
 const selectedOverviewMonth = ref(todayDate.slice(0, 7))
 const selectedRecordDate = ref(todayDate)
@@ -69,25 +55,9 @@ let undoTimer: ReturnType<typeof window.setTimeout> | undefined
 let unsubscribeAuth: (() => void) | undefined
 
 const currentUserId = () => session.value?.user.id ?? null
-const currentSpaceId = () => space.value?.space_id ?? null
-
-const isSharedSpace = computed(() => spaceMembers.value.length > 1)
-
-const memberLabels = computed(() =>
-  Object.fromEntries(
-    spaceMembers.value.map(({ user_id, email }) => [user_id, email?.split('@')[0] ?? 'สมาชิก']),
-  ),
-)
 
 const recordTransactions = computed(() =>
   transactions.value.filter(({ transaction_date }) => transaction_date === selectedRecordDate.value),
-)
-
-/** ยอดสรุปยังคิดจากทุกรายการ ตัวกรองจากกราฟวงกลมมีผลกับลิสต์เท่านั้น */
-const recordListTransactions = computed(() =>
-  recordFilter.value
-    ? recordTransactions.value.filter((item) => matchesSelection(item, recordFilter.value!))
-    : recordTransactions.value,
 )
 
 const filteredTransactions = computed(() => {
@@ -123,11 +93,9 @@ const previousMonthTransactions = computed(() => {
   )
 })
 
-const displayedTransactions = computed(() => {
-  if (selectionMode.value) return transactions.value
-  if (!overviewFilter.value) return filteredTransactions.value
-  return filteredTransactions.value.filter((item) => matchesSelection(item, overviewFilter.value!))
-})
+const displayedTransactions = computed(() =>
+  selectionMode.value ? transactions.value : filteredTransactions.value,
+)
 
 const sumTransactions = (items: Transaction[], type: TransactionType) =>
   items
@@ -198,19 +166,6 @@ const emptyListHint = computed(() => {
   return `ยังไม่มีรายการใน${overviewPeriodLabel.value}`
 })
 
-// ตัวกรองผูกกับชุดข้อมูลที่กำลังดู เปลี่ยนวัน เดือน หรือมุมมองแล้วต้องล้างทิ้ง
-watch(selectedRecordDate, () => {
-  recordFilter.value = null
-})
-
-watch([selectedOverviewMonth, viewMode], () => {
-  overviewFilter.value = null
-})
-
-watch(selectionMode, (active) => {
-  if (active) overviewFilter.value = null
-})
-
 const navigateTo = (page: AppPage) => {
   if (page === 'record') selectionMode.value = false
   activePage.value = page
@@ -256,8 +211,6 @@ const enterDemoMode = () => {
   errorMessage.value = ''
   clearUndo()
   transactions.value = createDemoTransactions()
-  recordFilter.value = null
-  overviewFilter.value = null
   selectedRecordDate.value = todayDate
   selectedOverviewMonth.value = todayDate.slice(0, 7)
   viewMode.value = 'month'
@@ -272,117 +225,9 @@ const exitDemoMode = () => {
   navigateTo('record')
 }
 
-/** ดึง space ที่ใช้งานอยู่ ถ้ายังไม่มีฝั่งฐานข้อมูลจะสร้างกระเป๋าส่วนตัวให้ */
-const loadSpace = async () => {
-  if (!supabase || !currentUserId()) {
-    space.value = null
-    spaceMembers.value = []
-    spaceOptions.value = []
-    return
-  }
-
-  spaceError.value = ''
-  const { data, error } = await supabase.rpc('ensure_active_space')
-
-  if (error) {
-    space.value = null
-    errorMessage.value = `เตรียมพื้นที่ข้อมูลไม่สำเร็จ: ${error.message}`
-    return
-  }
-
-  space.value = (Array.isArray(data) ? data[0] : data) as SpaceSummary | null
-  await loadSpaceMembers()
-}
-
-const loadSpaceMembers = async () => {
-  const spaceId = currentSpaceId()
-  if (!supabase || !spaceId) {
-    spaceMembers.value = []
-    spaceOptions.value = []
-    return
-  }
-
-  const [membersResult, optionsResult] = await Promise.all([
-    supabase.from('space_members').select('user_id, email, role').eq('space_id', spaceId),
-    supabase.from('space_members').select('space_id, spaces(name)').eq('user_id', currentUserId()),
-  ])
-
-  if (!membersResult.error) {
-    spaceMembers.value = (membersResult.data ?? []) as SpaceMember[]
-  }
-
-  if (!optionsResult.error) {
-    spaceOptions.value = (optionsResult.data ?? []).map((row) => {
-      const related = (row as { spaces: { name: string } | { name: string }[] | null }).spaces
-      const name = Array.isArray(related) ? related[0]?.name : related?.name
-      return {
-        space_id: (row as { space_id: string }).space_id,
-        space_name: name ?? 'กระเป๋าเงิน',
-      }
-    })
-  }
-}
-
-const joinSpace = async (code: string) => {
-  if (!supabase || blockedInDemo() || !code.trim()) return
-
-  spaceBusy.value = true
-  spaceError.value = ''
-
-  const { error } = await supabase.rpc('join_space_with_code', { code })
-
-  if (error) {
-    spaceError.value = error.message
-  } else {
-    await loadSpace()
-    await loadTransactions()
-    showMessage('เข้าร่วมกระเป๋าที่แชร์เรียบร้อยแล้ว')
-  }
-
-  spaceBusy.value = false
-}
-
-const switchSpace = async (spaceId: string) => {
-  if (!supabase || blockedInDemo() || spaceId === currentSpaceId()) return
-
-  spaceBusy.value = true
-  spaceError.value = ''
-
-  const { error } = await supabase.rpc('set_active_space', { target_space: spaceId })
-
-  if (error) {
-    spaceError.value = error.message
-  } else {
-    await loadSpace()
-    await loadTransactions()
-    showMessage('สลับกระเป๋าเรียบร้อยแล้ว')
-  }
-
-  spaceBusy.value = false
-}
-
-const rotateInviteCode = async () => {
-  const spaceId = currentSpaceId()
-  if (!supabase || blockedInDemo() || !spaceId) return
-
-  spaceBusy.value = true
-  spaceError.value = ''
-
-  const { error } = await supabase.rpc('rotate_space_invite_code', { target_space: spaceId })
-
-  if (error) {
-    spaceError.value = error.message
-  } else {
-    await loadSpace()
-    showMessage('ออกรหัสเชิญใหม่แล้ว รหัสเดิมใช้ไม่ได้อีก')
-  }
-
-  spaceBusy.value = false
-}
-
 const loadTransactions = async () => {
-  const spaceId = currentSpaceId()
-  if (!supabase || !currentUserId() || !spaceId) {
+  const userId = currentUserId()
+  if (!supabase || !userId) {
     transactions.value = []
     return
   }
@@ -393,7 +238,7 @@ const loadTransactions = async () => {
   const { data, error } = await supabase
     .from('transactions')
     .select('*')
-    .eq('space_id', spaceId)
+    .eq('user_id', userId)
     .order('transaction_date', { ascending: false })
     .order('created_at', { ascending: false })
 
@@ -409,8 +254,7 @@ const loadTransactions = async () => {
 const saveTransaction = async (input: TransactionInput) => {
   if (blockedInDemo()) return
   const userId = currentUserId()
-  const spaceId = currentSpaceId()
-  if (!supabase || !userId || !spaceId) return
+  if (!supabase || !userId) return
 
   saving.value = true
   errorMessage.value = ''
@@ -420,8 +264,8 @@ const saveTransaction = async (input: TransactionInput) => {
         .from('transactions')
         .update(input)
         .eq('id', editingTransaction.value.id)
-        .eq('space_id', spaceId)
-    : supabase.from('transactions').insert({ ...input, user_id: userId, space_id: spaceId })
+        .eq('user_id', userId)
+    : supabase.from('transactions').insert({ ...input, user_id: userId })
 
   const { error } = await query
 
@@ -444,10 +288,10 @@ const editTransaction = (transaction: Transaction) => {
 
 const deleteTransaction = async (transaction: Transaction) => {
   if (blockedInDemo()) return
-  const spaceId = currentSpaceId()
+  const userId = currentUserId()
   if (
     !supabase ||
-    !spaceId ||
+    !userId ||
     !window.confirm(`ต้องการลบ “${transaction.description}” ใช่หรือไม่?`)
   ) return
 
@@ -458,7 +302,7 @@ const deleteTransaction = async (transaction: Transaction) => {
     .from('transactions')
     .delete()
     .eq('id', transaction.id)
-    .eq('space_id', spaceId)
+    .eq('user_id', userId)
 
   if (error) {
     errorMessage.value = `ลบข้อมูลไม่สำเร็จ: ${error.message}`
@@ -473,8 +317,7 @@ const deleteTransaction = async (transaction: Transaction) => {
 
 const undoDelete = async () => {
   const userId = currentUserId()
-  const spaceId = currentSpaceId()
-  if (!supabase || !userId || !spaceId || !deletedTransaction.value) return
+  if (!supabase || !userId || !deletedTransaction.value) return
 
   const transaction = deletedTransaction.value
   undoBusy.value = true
@@ -482,7 +325,6 @@ const undoDelete = async () => {
 
   const { error } = await supabase.from('transactions').insert({
     user_id: userId,
-    space_id: spaceId,
     description: transaction.description,
     amount: transaction.amount,
     type: transaction.type,
@@ -511,10 +353,10 @@ const startSelectionMode = async () => {
 
 const deleteSelectedTransactions = async (ids: number[]) => {
   if (blockedInDemo()) return
-  const spaceId = currentSpaceId()
+  const userId = currentUserId()
   if (
     !supabase ||
-    !spaceId ||
+    !userId ||
     ids.length === 0 ||
     !window.confirm(`ยืนยันลบธุรกรรมที่เลือก ${ids.length} รายการ? การดำเนินการนี้ย้อนกลับไม่ได้`)
   ) return
@@ -526,7 +368,7 @@ const deleteSelectedTransactions = async (ids: number[]) => {
   const { error } = await supabase
     .from('transactions')
     .delete()
-    .eq('space_id', spaceId)
+    .eq('user_id', userId)
     .in('id', ids)
 
   if (error) {
@@ -546,8 +388,8 @@ const deleteSelectedTransactions = async (ids: number[]) => {
 
 const resetAllTransactions = async () => {
   if (blockedInDemo()) return
-  const spaceId = currentSpaceId()
-  if (!supabase || !spaceId || transactions.value.length === 0) return
+  const userId = currentUserId()
+  if (!supabase || !userId || transactions.value.length === 0) return
 
   clearUndo()
   bulkBusy.value = true
@@ -556,7 +398,7 @@ const resetAllTransactions = async () => {
   const { error } = await supabase
     .from('transactions')
     .delete()
-    .eq('space_id', spaceId)
+    .eq('user_id', userId)
 
   if (error) {
     errorMessage.value = `รีเซ็ตข้อมูลไม่สำเร็จ: ${error.message}`
@@ -574,13 +416,6 @@ const resetAllTransactions = async () => {
 const clearAuthenticatedState = () => {
   clearUndo()
   transactions.value = []
-  recordFilter.value = null
-  overviewFilter.value = null
-  space.value = null
-  spaceMembers.value = []
-  spaceOptions.value = []
-  spaceBusy.value = false
-  spaceError.value = ''
   editingTransaction.value = null
   selectionMode.value = false
   settingsOpen.value = false
@@ -608,10 +443,7 @@ const initializeAuth = async () => {
     if (error) throw error
 
     session.value = data.session
-    if (data.session) {
-      await loadSpace()
-      await loadTransactions()
-    }
+    if (data.session) await loadTransactions()
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       const previousUserId = session.value?.user.id
@@ -624,9 +456,7 @@ const initializeAuth = async () => {
         clearAuthenticatedState()
       } else if (nextUserId !== previousUserId) {
         clearAuthenticatedState()
-        window.setTimeout(() => {
-          void loadSpace().then(() => loadTransactions())
-        }, 0)
+        window.setTimeout(() => void loadTransactions(), 0)
       }
     })
 
@@ -711,15 +541,7 @@ onBeforeUnmount(() => {
           >
             <span class="connection-dot"></span>
             <span class="account-copy">
-              <small>
-                {{
-                  demoMode
-                    ? 'โหมดดูตัวอย่าง'
-                    : isSharedSpace
-                      ? `แชร์กับ ${spaceMembers.length} บัญชี`
-                      : 'เข้าสู่ระบบแล้ว'
-                }}
-              </small>
+              <small>{{ demoMode ? 'โหมดดูตัวอย่าง' : 'เข้าสู่ระบบแล้ว' }}</small>
               <b>{{ demoMode ? DEMO_USER_EMAIL : session?.user.email ?? 'บัญชีผู้ใช้' }}</b>
             </span>
           </span>
@@ -842,22 +664,14 @@ onBeforeUnmount(() => {
               :income-label="isRecordToday ? 'รายรับวันนี้' : 'รายรับวันนั้น'"
               :expense-label="isRecordToday ? 'รายจ่ายวันนี้' : 'รายจ่ายวันนั้น'"
             />
-            <p v-if="recordFilter" class="filter-chip" role="status">
-              <span>กรองเฉพาะ {{ recordFilter.emoji }} {{ recordFilter.label }}</span>
-              <small>{{ recordFilter.type === 'income' ? 'รายรับ' : 'รายจ่าย' }} · {{ recordListTransactions.length }} รายการ</small>
-              <button type="button" aria-label="ล้างตัวกรองหมวดหมู่" @click="recordFilter = null">ล้างตัวกรอง ✕</button>
-            </p>
-
             <TransactionList
               class="record-list"
-              :transactions="recordListTransactions"
+              :transactions="recordTransactions"
               :loading="loading"
               :busy-id="busyId"
               :selection-mode="false"
               :bulk-busy="bulkBusy"
               :read-only="demoMode"
-              :show-author="isSharedSpace"
-              :member-labels="memberLabels"
               :empty-hint="isRecordToday ? 'วันนี้ยังไม่มีรายการ เริ่มจดจากฟอร์มได้เลย' : `${recordDateLabel} ยังไม่มีรายการ`"
               @edit="editTransaction"
               @delete="deleteTransaction"
@@ -872,11 +686,10 @@ onBeforeUnmount(() => {
               show-type-toggle
               eyebrow="Daily breakdown"
               :title="isRecordToday ? 'สัดส่วนหมวดหมู่วันนี้' : `สัดส่วนหมวดหมู่ ${recordDateLabel}`"
-              :active-key="recordFilter?.key ?? null"
+              :show-item-date="false"
               :empty-hint="isRecordToday
                 ? 'จดรายการของวันนี้แล้วกราฟวงกลมจะแยกสัดส่วนให้ทันที'
                 : 'ยังไม่มีรายการของวันนั้น เลือกวันอื่นหรือเพิ่มรายการได้เลย'"
-              @select="recordFilter = $event"
             />
           </section>
 
@@ -935,12 +748,6 @@ onBeforeUnmount(() => {
           />
         </section>
 
-        <p v-if="overviewFilter && !selectionMode" class="filter-chip" role="status">
-          <span>กรองเฉพาะ {{ overviewFilter.emoji }} {{ overviewFilter.label }}</span>
-          <small>{{ overviewFilter.type === 'income' ? 'รายรับ' : 'รายจ่าย' }} · {{ displayedTransactions.length }} รายการ</small>
-          <button type="button" aria-label="ล้างตัวกรองหมวดหมู่" @click="overviewFilter = null">ล้างตัวกรอง ✕</button>
-        </p>
-
         <div class="overview-workspace">
           <TransactionList
             class="overview-list"
@@ -950,8 +757,6 @@ onBeforeUnmount(() => {
             :selection-mode="selectionMode"
             :bulk-busy="bulkBusy"
             :read-only="demoMode"
-            :show-author="isSharedSpace"
-            :member-labels="memberLabels"
             :empty-hint="emptyListHint"
             @edit="editTransaction"
             @delete="deleteTransaction"
@@ -966,8 +771,6 @@ onBeforeUnmount(() => {
                 :transactions="filteredTransactions"
                 :previous-transactions="previousMonthTransactions"
                 :month-label="overviewPeriodLabel"
-                :active-key="overviewFilter?.key ?? null"
-                @select="overviewFilter = $event"
               />
             </div>
 
@@ -979,9 +782,7 @@ onBeforeUnmount(() => {
               show-type-toggle
               eyebrow="All-time breakdown"
               title="สัดส่วนหมวดหมู่ทั้งหมด"
-              :active-key="overviewFilter?.key ?? null"
               empty-hint="เมื่อมีรายการในระบบ ระบบจะแยกสัดส่วนตามหมวดหมู่ให้ทันที"
-              @select="overviewFilter = $event"
             />
           </div>
         </div>
@@ -1001,14 +802,6 @@ onBeforeUnmount(() => {
       :transaction-count="transactions.length"
       :busy="bulkBusy"
       :read-only="demoMode"
-      :space="space"
-      :members="spaceMembers"
-      :space-options="spaceOptions"
-      :space-busy="spaceBusy"
-      :space-error="spaceError"
-      @join-space="joinSpace"
-      @switch-space="switchSpace"
-      @rotate-invite-code="rotateInviteCode"
       @close="settingsOpen = false"
       @manage="startSelectionMode"
       @reset="resetAllTransactions"
@@ -1451,48 +1244,6 @@ onBeforeUnmount(() => {
 .overview-donut {
   min-width: 0;
   height: auto;
-}
-
-.filter-chip {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 0 0 9px;
-  padding: 8px 11px;
-  border: 1px solid #d7e4dc;
-  border-radius: 11px;
-  background: #f1f7f3;
-  font-family: 'Noto Sans Thai', sans-serif;
-}
-
-.filter-chip span {
-  color: #2f4f3f;
-  font-size: 0.68rem;
-  font-weight: 700;
-}
-
-.filter-chip small {
-  color: #7d8983;
-  font-size: 0.6rem;
-}
-
-.filter-chip button {
-  min-height: 28px;
-  margin-left: auto;
-  padding: 5px 10px;
-  border: 1px solid #cbdad2;
-  border-radius: 8px;
-  color: #35604a;
-  background: #fff;
-  font-family: 'Noto Sans Thai', sans-serif;
-  font-size: 0.6rem;
-  font-weight: 700;
-}
-
-.filter-chip button:hover {
-  border-color: #a7c3b3;
-  background: #f6fbf8;
 }
 
 .demo-banner {
