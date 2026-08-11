@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useDailyReminder } from '../composables/useDailyReminder'
 import { useSalarySettings } from '../composables/useSalarySettings'
 
 const props = withDefaults(
@@ -25,10 +26,22 @@ const {
   saveMonthlySalary,
   toggleSalaryVisibility,
 } = useSalarySettings()
+const {
+  reminderEnabled,
+  reminderTime,
+  reminderBusy,
+  isNativeReminderSupported,
+  initializeDailyReminder,
+  updateDailyReminder,
+} = useDailyReminder()
 const confirmingReset = ref(false)
 const salaryDraft = ref<number | string>(monthlySalary.value)
 const salaryError = ref('')
 const salaryNotice = ref('')
+const reminderEnabledDraft = ref(reminderEnabled.value)
+const reminderTimeDraft = ref(reminderTime.value)
+const reminderFeedback = ref('')
+const reminderFeedbackIsError = ref(false)
 let salaryNoticeTimer: ReturnType<typeof window.setTimeout> | undefined
 
 const showSalaryNotice = (message: string) => {
@@ -45,14 +58,18 @@ const toggleSalaryPrivacy = () => {
   showSalaryNotice(result.persisted ? action : `${action} แต่จำค่าได้เฉพาะรอบนี้`)
 }
 
-const resetSalaryEditor = () => {
+const resetEditors = () => {
   salaryDraft.value = monthlySalary.value
   salaryError.value = ''
   salaryNotice.value = ''
+  reminderEnabledDraft.value = reminderEnabled.value
+  reminderTimeDraft.value = reminderTime.value
+  reminderFeedback.value = ''
+  reminderFeedbackIsError.value = false
 }
 
 watch(() => props.open, (open) => {
-  if (open) resetSalaryEditor()
+  if (open) resetEditors()
 })
 
 const submitSalary = () => {
@@ -81,8 +98,34 @@ const submitSalary = () => {
     : 'ใช้ค่านี้ในรอบปัจจุบัน แต่เบราว์เซอร์ไม่อนุญาตให้บันทึกถาวร')
 }
 
+const submitReminder = async () => {
+  reminderFeedback.value = ''
+  reminderFeedbackIsError.value = false
+  const result = await updateDailyReminder(reminderEnabledDraft.value, reminderTimeDraft.value)
+
+  if (result.ok) {
+    reminderFeedback.value = reminderEnabledDraft.value
+      ? `ตั้งเตือนทุกวันเวลา ${reminderTimeDraft.value} น. แล้ว`
+      : 'ปิดการแจ้งเตือนรายวันแล้ว'
+    if (!result.persisted) reminderFeedback.value += ' แต่จำค่าได้เฉพาะรอบนี้'
+    return
+  }
+
+  reminderEnabledDraft.value = reminderEnabled.value
+  reminderFeedbackIsError.value = true
+  if (result.reason === 'permission-denied') {
+    reminderFeedback.value = 'ยังไม่ได้รับสิทธิ์แจ้งเตือน สามารถเปิดภายหลังได้จากการตั้งค่า Android'
+  } else if (result.reason === 'unsupported') {
+    reminderFeedback.value = 'การแจ้งเตือนรายวันใช้ได้เมื่อเปิดผ่านแอป Android เท่านั้น'
+  } else if (result.reason === 'invalid-time') {
+    reminderFeedback.value = 'กรุณาเลือกเวลาแจ้งเตือนให้ถูกต้อง'
+  } else {
+    reminderFeedback.value = 'ตั้งการแจ้งเตือนไม่สำเร็จ กรุณาลองใหม่'
+  }
+}
+
 const close = () => {
-  if (props.busy) return
+  if (props.busy || reminderBusy.value) return
   confirmingReset.value = false
   emit('close')
 }
@@ -96,7 +139,10 @@ const handleKeydown = (event: KeyboardEvent) => {
   if (event.key === 'Escape' && props.open) close()
 }
 
-onMounted(() => window.addEventListener('keydown', handleKeydown))
+onMounted(() => {
+  window.addEventListener('keydown', handleKeydown)
+  void initializeDailyReminder()
+})
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown)
   window.clearTimeout(salaryNoticeTimer)
@@ -187,6 +233,58 @@ onBeforeUnmount(() => {
               </div>
               <button class="setting-button salary-save" type="submit" :disabled="busy">
                 บันทึกเงินเดือน
+              </button>
+            </form>
+
+            <form class="setting-card reminder-card" @submit.prevent="submitReminder">
+              <div class="setting-icon setting-icon--reminder" aria-hidden="true">◷</div>
+              <div class="setting-copy reminder-copy">
+                <strong>เตือนจดรายจ่ายทุกวัน</strong>
+                <p v-if="isNativeReminderSupported">
+                  เลือกเวลาที่สะดวก ระบบจะขอสิทธิ์แจ้งเตือนเมื่อคุณกดบันทึกเพื่อเปิดใช้งาน
+                </p>
+                <p v-else>
+                  ฟีเจอร์นี้ใช้ได้ในแอป Android เว็บปกติจะไม่เรียกใช้การแจ้งเตือนของอุปกรณ์
+                </p>
+
+                <div class="reminder-controls">
+                  <label class="reminder-toggle">
+                    <input
+                      v-model="reminderEnabledDraft"
+                      type="checkbox"
+                      :disabled="busy || reminderBusy || !isNativeReminderSupported"
+                      @change="reminderFeedback = ''"
+                    />
+                    <span aria-hidden="true"></span>
+                    เปิดการแจ้งเตือน
+                  </label>
+                  <label class="reminder-time" for="daily-reminder-time">
+                    <span>เวลา</span>
+                    <input
+                      id="daily-reminder-time"
+                      v-model="reminderTimeDraft"
+                      type="time"
+                      :disabled="busy || reminderBusy || !isNativeReminderSupported"
+                      @input="reminderFeedback = ''"
+                    />
+                    <span>น.</span>
+                  </label>
+                </div>
+
+                <small
+                  v-if="reminderFeedback"
+                  class="reminder-feedback"
+                  :class="{ 'reminder-feedback--error': reminderFeedbackIsError }"
+                  :role="reminderFeedbackIsError ? 'alert' : 'status'"
+                >{{ reminderFeedback }}</small>
+                <small v-else>ค่าเริ่มต้น 21:00 น. · เก็บเฉพาะในอุปกรณ์เครื่องนี้</small>
+              </div>
+              <button
+                class="setting-button reminder-save"
+                type="submit"
+                :disabled="busy || reminderBusy || !isNativeReminderSupported"
+              >
+                {{ reminderBusy ? 'กำลังตั้งค่า...' : 'บันทึกการเตือน' }}
               </button>
             </form>
 
@@ -461,9 +559,94 @@ onBeforeUnmount(() => {
   color: #277451;
 }
 
-.salary-save {
+.salary-save,
+.reminder-save {
   align-self: end;
 }
+
+.reminder-card {
+  align-items: start;
+  margin-bottom: 12px;
+  border-color: #d8e1d1;
+  background: linear-gradient(135deg, #fbfcf7, #f4f8e8);
+}
+
+.setting-icon--reminder {
+  color: #194d3b;
+  background: #e7f4bd;
+  font-size: 1.2rem;
+}
+
+.reminder-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.reminder-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-top: 9px;
+}
+
+.reminder-toggle,
+.reminder-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #4f675c;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.reminder-toggle input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.reminder-toggle > span {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  background: #cbd5cf;
+  transition: background 0.18s;
+}
+
+.reminder-toggle > span::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(25, 77, 59, 0.28);
+  content: '';
+  transition: transform 0.18s;
+}
+
+.reminder-toggle input:checked + span { background: #39775d; }
+.reminder-toggle input:checked + span::after { transform: translateX(14px); }
+.reminder-toggle input:focus-visible + span { outline: 3px solid rgba(41, 116, 79, 0.25); }
+.reminder-toggle input:disabled + span { opacity: 0.55; }
+
+.reminder-time input {
+  min-height: 36px;
+  padding: 5px 8px;
+  border: 1px solid #cfdcd4;
+  border-radius: 8px;
+  color: #1f352b;
+  background: #fff;
+  font-family: 'Manrope', sans-serif;
+  font-weight: 700;
+}
+
+.reminder-feedback { color: #277451 !important; }
+.reminder-feedback--error { color: #b74740 !important; }
 
 .setting-icon--manage {
   color: #267551;

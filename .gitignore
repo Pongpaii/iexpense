@@ -8,5 +8,7 @@ dist
 !.vscode/extensions.json
 .DS_Store
 *.tsbuildinfo
+*.jks
+*.keystore
 .vercel
 .env*

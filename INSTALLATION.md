@@ -108,7 +108,51 @@ npm run dev
 - ต้องตั้ง Environment Variables `VITE_SUPABASE_URL` และ `VITE_SUPABASE_ANON_KEY` ในหน้า setting ของ host ด้วย (ค่าจะถูกฝังตอน build)
 - เพิ่มโดเมนที่ deploy เข้าไปใน Redirect URLs ของ Supabase
 
-## 8. โหมด Demo
+## 8. Build APK ด้วย GitHub Actions (ไม่ต้องลง Android Studio)
+
+เครื่องผู้ใช้ **ไม่ต้องมี Android Studio หรือ Android SDK** เพราะ workflow `.github/workflows/android.yml` จะ build บน GitHub runner ด้วย JDK 21 และ Android SDK 36 โดยลำดับงานคือ:
+
+1. `npm ci`
+2. `npm run build`
+3. `npx cap sync android`
+4. `android/gradlew assembleDebug`
+5. อัปโหลด `app-debug.apk` เป็น artifact ชื่อ `money-flow-debug-apk`
+
+### ตั้ง GitHub Secrets
+
+ไปที่ repository บน GitHub → **Settings** → **Secrets and variables** → **Actions** → **New repository secret** แล้วสร้างให้ครบสองชื่อ (ตัวพิมพ์ใหญ่/เล็กต้องตรง):
+
+- `VITE_SUPABASE_URL` — URL ของ Supabase project
+- `VITE_SUPABASE_ANON_KEY` — anon public key ของ Supabase
+
+ใช้ค่าเดียวกับใน `.env` แต่ห้าม commit `.env`, secret หรือ keystore เข้า git ค่า Vite ทั้งสองจะถูกฝังใน web bundle ตอน workflow build ดังนั้นต้องใช้ anon public key เท่านั้น ห้ามใช้ service role key
+
+### สั่ง build และดาวน์โหลด APK
+
+1. push การเปลี่ยนแปลงขึ้น GitHub (workflow จะทำงานเมื่อไฟล์แอป/Android ที่กำหนดเปลี่ยนบน `main`) หรือไปที่แท็บ **Actions** → **Build Android APK** → **Run workflow**
+2. รอ job **Build debug APK** เป็นสีเขียว
+3. เปิด workflow run นั้น เลื่อนลงส่วน **Artifacts** แล้วดาวน์โหลด `money-flow-debug-apk`
+4. แตกไฟล์ ZIP จะได้ `app-debug.apk`
+
+> `main` เชื่อมกับ Vercel production อยู่ ควรตรวจ type และ web build ให้ผ่านก่อน push ทุกครั้ง การเพิ่ม Capacitor ไม่เปลี่ยน Vercel output ซึ่งยังเป็น `dist/` เหมือนเดิม
+
+### คำสั่งใดต้องมี Android SDK
+
+- ไม่ต้องมี SDK: ติดตั้ง npm packages, `npx cap init`, `npx cap add android`, `npm run build` และตรวจ TypeScript
+- ต้องมี SDK/JDK หรือเครื่องมือ Android: Gradle `assembleDebug`, emulator, `adb` และ `npx cap open android` (ต้องมี Android Studio)
+- `npx cap sync android` ทำหน้าที่ copy web assets/plugins และไม่ได้ compile APK แต่โปรเจกต์นี้ตั้งใจให้ workflow เป็นผู้รัน เพื่อไม่ให้ผู้ใช้ต้องเตรียม native toolchain ในเครื่อง
+
+## 9. ติดตั้ง APK ลงมือถือ Android
+
+1. ดาวน์โหลด artifact และแตก `app-debug.apk` ตามขั้นตอนด้านบน
+2. ส่ง APK ไปมือถือผ่านสาย USB, cloud drive หรือแอปส่งไฟล์
+3. เปิดไฟล์ APK บนมือถือ หาก Android ถาม ให้เปิดสิทธิ์ **ติดตั้งแอปที่ไม่รู้จัก (Install unknown apps)** เฉพาะแอปที่ใช้เปิดไฟล์
+4. ยืนยันติดตั้ง แล้วเปิดแอป **Money Flow**
+5. เข้าสู่ระบบหรือใช้ Demo ได้เหมือนเว็บ จากนั้นไปที่ไอคอนตั้งค่าเพื่อเลือกเวลาและเปิดแจ้งเตือนรายวัน ระบบจึงจะขอสิทธิ์แจ้งเตือน (Android 13+)
+
+APK นี้เป็น **debug build** สำหรับติดตั้งทดสอบเอง ยังไม่เหมาะสำหรับ Play Store และไม่ได้ใช้ release signing หาก APK จาก workflow รอบใหม่ติดตั้งทับไม่ได้เพราะ debug signature เปลี่ยน ให้ถอนเวอร์ชันเดิมก่อนแล้วติดตั้งใหม่ (ข้อมูลธุรกรรมใน Supabase ไม่หาย แต่ค่าบนอุปกรณ์ เช่น เวลาแจ้งเตือน อาจต้องตั้งใหม่)
+
+## 10. โหมด Demo
 
 ปุ่ม **เข้าดูตัวอย่างแอป (Demo)** ที่หน้าล็อกอินจะเข้าแอปโดยไม่ต้องมีบัญชี
 
@@ -118,7 +162,7 @@ npm run dev
 - ตั้งค่าเงินเดือนยังปรับได้ เพราะเก็บใน localStorage ของเบราว์เซอร์เท่านั้น
 - ออกจากโหมดนี้ได้จากปุ่ม "เข้าสู่ระบบ" บนแถบแจ้งเตือน หรือไอคอนออกที่มุมขวาบน
 
-## 9. แก้ปัญหาที่พบบ่อย
+## 11. แก้ปัญหาที่พบบ่อย
 
 **`npm : File ...\npm.ps1 cannot be loaded because running scripts is disabled`**
 PowerShell ปิดการรันสคริปต์อยู่ เลือกทางใดทางหนึ่ง
@@ -143,7 +187,7 @@ Redirect URL ใน Supabase ไม่ตรงกับ origin ที่เป�
 **ล็อกอินได้แต่ไม่เห็นข้อมูล / บันทึกไม่ได้**
 ยังไม่ได้รัน `supabase/schema.sql` หรือ RLS policy ไม่ครบ ลองรันสคริปต์ซ้ำ (เขียนให้รันซ้ำได้ปลอดภัย)
 
-## โครงสร้างโปรเจกต์คร่าว ๆ
+## 12. โครงสร้างโปรเจกต์คร่าว ๆ
 
 ```
 src/
@@ -156,7 +200,7 @@ src/
     SummaryCards.vue       การ์ดสรุปยอด
     CashFlowChart.vue      กราฟแท่งรายรับ-รายจ่าย 6 เดือน
     CategoryDonut.vue      กราฟวงกลมแยกหมวดหมู่ กดดูรายการในแต่ละ % ได้
-    BubbleGalaxy.vue       แท็บฟองเงิน ทุกรายการเป็นฟองลอย กวนด้วยเมาส์ได้
+    BubbleGalaxy.vue       แท็บฟองเงิน ฟองละหนึ่งของที่จ่ายซ้ำ ขนาดตามจำนวนครั้ง
     ExpenseAnalytics.vue   วิเคราะห์รายจ่ายรายเดือน + เทียบเดือนก่อน
     MoneyBuddy.vue         ผู้ช่วยคาดการณ์เงินคงเหลือ
     SettingsModal.vue      ตั้งค่าเงินเดือน / จัดการข้อมูล
@@ -164,7 +208,8 @@ src/
     categoryBreakdown.ts   รวมยอดตามหมวดหมู่ให้กราฟวงกลม
     demoData.ts            ชุดข้อมูลตัวอย่างของโหมด demo
     authErrors.ts          แปล error ของ Supabase Auth เป็นภาษาไทย
-    bubbleField.ts         ฟิสิกส์ของฟองเงิน (แยกออกมาให้ทดสอบได้)
+    bubbleField.ts         ฟิสิกส์และการจัดขนาด/ตัดชื่อของฟองเงิน (แยกให้ทดสอบได้)
+    spendingHabits.ts      รวมรายการชื่อซ้ำเป็นของที่จ่ายบ่อย พร้อมจำนวนครั้งและยอดรวม
     forecast.ts, format.ts
   lib/supabase.ts          สร้าง Supabase client จาก env
 supabase/schema.sql        สคริปต์สร้างตารางและ RLS
