@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { Transaction, TransactionType } from '../types/transaction'
-import { buildCategoryBreakdown, formatPercent } from '../utils/categoryBreakdown'
-import { formatBaht, formatDate } from '../utils/format'
+import {
+  buildCategoryBreakdown,
+  formatPercent,
+  type CategorySelection,
+} from '../utils/categoryBreakdown'
+import { formatBaht } from '../utils/format'
 
 const props = withDefaults(
   defineProps<{
@@ -13,7 +17,8 @@ const props = withDefaults(
     eyebrow?: string
     title?: string
     emptyHint?: string
-    showItemDate?: boolean
+    /** หมวดหมู่ที่กำลังกรองอยู่ ควบคุมจากคอมโพเนนต์แม่เพื่อให้ลิสต์กับกราฟตรงกัน */
+    activeKey?: string | null
   }>(),
   {
     type: 'expense',
@@ -22,21 +27,25 @@ const props = withDefaults(
     eyebrow: '',
     title: '',
     emptyHint: 'เมื่อมีรายการ ระบบจะแยกสัดส่วนตามหมวดหมู่ให้ทันที',
-    showItemDate: true,
+    activeKey: null,
   },
 )
+
+const emit = defineEmits<{
+  select: [selection: CategorySelection | null]
+}>()
 
 const RADIUS = 44
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS
 
 const activeType = ref<TransactionType>(props.type)
-const selectedKey = ref<string | null>(null)
+const selectedKey = computed(() => props.activeKey)
 
 watch(
   () => props.type,
   (next) => {
     activeType.value = next
-    selectedKey.value = null
+    emit('select', null)
   },
 )
 
@@ -45,7 +54,8 @@ const slices = computed(() => breakdown.value.slices)
 const total = computed(() => breakdown.value.total)
 
 watch(slices, (next) => {
-  if (selectedKey.value && !next.some(({ key }) => key === selectedKey.value)) selectedKey.value = null
+  // หมวดที่เลือกอาจหายไปเมื่อเปลี่ยนเดือนหรือวัน จึงต้องล้างตัวกรองให้
+  if (selectedKey.value && !next.some(({ key }) => key === selectedKey.value)) emit('select', null)
 })
 
 const selectedSlice = computed(() => slices.value.find(({ key }) => key === selectedKey.value) ?? null)
@@ -67,18 +77,27 @@ const segments = computed(() => {
 const typeLabel = computed(() => (activeType.value === 'expense' ? 'รายจ่าย' : 'รายรับ'))
 
 const toggleSlice = (key: string) => {
-  selectedKey.value = selectedKey.value === key ? null : key
+  if (selectedKey.value === key) {
+    emit('select', null)
+    return
+  }
+
+  const slice = slices.value.find((item) => item.key === key)
+  if (!slice) return
+
+  emit('select', {
+    key: slice.key,
+    label: slice.label,
+    emoji: slice.emoji,
+    category: slice.category,
+    type: activeType.value,
+  })
 }
 
 const switchType = (next: TransactionType) => {
   if (activeType.value === next) return
   activeType.value = next
-  selectedKey.value = null
-}
-
-const itemShare = (amount: number) => {
-  const categoryTotal = selectedSlice.value?.amount ?? 0
-  return categoryTotal > 0 ? (Number(amount) / categoryTotal) * 100 : 0
+  emit('select', null)
 }
 </script>
 
@@ -140,7 +159,11 @@ const itemShare = (amount: number) => {
       </div>
 
       <p class="donut-hint">
-        {{ selectedSlice ? 'กดหมวดเดิมอีกครั้งเพื่อดูภาพรวมทั้งหมด' : 'กดที่กราฟหรือรายการหมวดหมู่ เพื่อดูว่ามีรายการอะไรอยู่ในนั้น' }}
+        {{
+          selectedSlice
+            ? `รายการด้านล่างกรองเฉพาะ${selectedSlice.label} · กดซ้ำเพื่อดูทั้งหมด`
+            : 'กดที่กราฟหรือรายการหมวดหมู่ เพื่อกรองรายการในลิสต์ด้านล่าง'
+        }}
       </p>
 
       <ul class="donut-legend">
@@ -149,7 +172,7 @@ const itemShare = (amount: number) => {
             type="button"
             class="legend-row"
             :class="{ 'is-selected': slice.key === selectedKey }"
-            :aria-expanded="slice.key === selectedKey"
+            :aria-pressed="slice.key === selectedKey"
             @click="toggleSlice(slice.key)"
           >
             <span class="legend-name">
@@ -167,18 +190,6 @@ const itemShare = (amount: number) => {
             </span>
           </button>
 
-          <ul v-if="slice.key === selectedKey" class="legend-items">
-            <li v-for="item in slice.items" :key="item.id">
-              <span class="item-main">
-                <b>{{ item.description }}</b>
-                <small v-if="showItemDate">{{ formatDate(item.transaction_date) }}</small>
-              </span>
-              <span class="item-value">
-                <b>{{ formatBaht(Number(item.amount)) }}</b>
-                <small>{{ formatPercent(itemShare(item.amount)) }} ของหมวด</small>
-              </span>
-            </li>
-          </ul>
         </li>
       </ul>
     </div>
@@ -230,19 +241,11 @@ const itemShare = (amount: number) => {
 .legend-value { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .legend-value b { color: #334d41; font: 700 .61rem 'Noto Sans Thai', sans-serif; }
 .legend-value small { min-width: 26px; color: #8d9792; font: 600 .55rem 'Noto Sans Thai', sans-serif; text-align: right; }
-.legend-caret { color: #9aa5a0; font-size: .5rem; font-style: normal; transition: transform .18s ease; }
-.legend-row.is-selected .legend-caret { transform: rotate(180deg); }
+.legend-caret { color: #9aa5a0; font-size: .5rem; font-style: normal; opacity: 0; transition: opacity .18s ease; }
+.legend-row:hover .legend-caret { opacity: .7; }
+.legend-row.is-selected .legend-caret { color: #3d7a58; opacity: 1; }
 .legend-bar { grid-column: 1 / -1; height: 5px; overflow: hidden; border-radius: 999px; background: #edf0ee; }
 .legend-bar i { display: block; height: 100%; border-radius: inherit; transition: width .4s ease; }
-
-.legend-items { display: grid; gap: 4px; margin: 5px 0 4px; padding: 7px 8px; border-left: 2px solid #dbe6e0; border-radius: 0 9px 9px 0; background: #f7faf8; list-style: none; }
-.legend-items li { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.item-main { display: grid; min-width: 0; }
-.item-main b { overflow: hidden; color: #43554c; font: 600 .58rem 'Noto Sans Thai', sans-serif; text-overflow: ellipsis; white-space: nowrap; }
-.item-main small { color: #98a29d; font: 500 .48rem 'Noto Sans Thai', sans-serif; }
-.item-value { display: grid; justify-items: end; white-space: nowrap; }
-.item-value b { color: #2f4a3d; font: 700 .58rem 'Noto Sans Thai', sans-serif; }
-.item-value small { color: #98a29d; font: 500 .46rem 'Noto Sans Thai', sans-serif; }
 
 .donut-empty { display: flex; min-height: 175px; align-items: center; justify-content: center; flex-direction: column; gap: 5px; color: #7b8781; font-family: 'Noto Sans Thai', sans-serif; text-align: center; }
 .donut-empty > div { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 12px; color: #56816c; background: #edf4f0; font-size: 1.1rem; }
