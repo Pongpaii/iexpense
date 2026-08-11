@@ -50,11 +50,23 @@ const spendingRatio = computed(() => {
 })
 
 const mood = computed<Mood>(() => {
-  if (props.income === 0 && props.expense === 0 && !forecast.value.hasSpendingData) return 'ready'
-  if (forecast.value.status === 'risk') return 'crying'
+  const result = forecast.value
+
+  if (props.income === 0 && props.expense === 0 && !result.hasSpendingData) return 'ready'
+  if (props.balance < 0) return 'crying'
+  // ข้อมูลยังน้อยเกินกว่าจะตัดสิน อย่าทำให้ผู้ใช้ใหม่ตกใจด้วยเลขที่ยังเชื่อไม่ได้
+  if (result.status === 'insufficient') return 'ready'
+  if (result.status === 'risk') return 'crying'
   if (props.expense > 0 && (props.income <= 0 || spendingRatio.value >= 80)) return 'crying'
-  if (forecast.value.status === 'watch' || spendingRatio.value >= 50) return 'worried'
+  if (result.status === 'watch' || spendingRatio.value >= 50) return 'worried'
   return 'happy'
+})
+
+const learningNote = computed(() => {
+  const result = forecast.value
+  const trustPercent = Math.round(result.estimateWeight * 100)
+  return `ข้อมูล ${result.historyDays} วัน ${result.expenseRecordCount} รายการ `
+    + `น้องเชื่อข้อมูลจริงอยู่ ${trustPercent}% ที่เหลือใช้ค่าอ้างอิงจากเงินเดือนแทน`
 })
 
 const forecastMessage = computed(() => {
@@ -66,7 +78,15 @@ const forecastMessage = computed(() => {
       : `ตั้งเงินเดือนไว้ ${formatBaht(result.monthlySalary)} วันที่ ${result.salaryDay} เริ่มจดรายจ่ายเพื่อให้คาดการณ์แม่นขึ้นนะ`
   }
 
+  if (result.status === 'insufficient') {
+    return `ยังสรุปแนวโน้มไม่ได้นะ ${learningNote.value} `
+      + `ตอนนี้ประเมินไว้ราว ${formatBaht(result.averageDailyExpense)} ต่อวัน`
+  }
+
   if (result.status === 'risk') {
+    if (result.currentBalance < 0) {
+      return `ยอดคงเหลือติดลบ ${formatBaht(Math.abs(result.currentBalance))} อยู่แล้ว ต้องรีบเบรกรายจ่ายนะ`
+    }
     if (result.balanceBeforeSalary < 0) {
       return `ถ้าใช้เท่าเดิม เงินอาจขาด ${formatBaht(Math.abs(result.balanceBeforeSalary))} ก่อนเงินเดือนรอบหน้า`
     }
@@ -109,7 +129,9 @@ const message = computed(() => {
 })
 
 const statusLabel = computed(() => {
-  if (mood.value === 'ready') return 'รอข้อมูลแรก'
+  if (mood.value === 'ready') {
+    return forecast.value.hasSpendingData ? 'กำลังเรียนรู้' : 'รอข้อมูลแรก'
+  }
   if (mood.value === 'happy') return 'บริหารได้ดี'
   if (mood.value === 'worried') return 'ควรเฝ้าดู'
   return 'เสี่ยงเงินไม่พอ'
@@ -123,9 +145,9 @@ const forecastStatusLabel = computed(() => {
 })
 
 const forecastConfidenceLabel = computed(() => {
-  if (forecast.value.confidence === 'high') return 'ความมั่นใจสูง'
+  if (forecast.value.confidence === 'high') return 'ความมั่นใจสูง (ข้อมูลเกิน 2 รอบเงินเดือน)'
   if (forecast.value.confidence === 'medium') return 'ความมั่นใจปานกลาง'
-  return 'ข้อมูลยังน้อย'
+  return 'ข้อมูลยังน้อย ยังไม่เตือนแนวโน้ม'
 })
 
 const nextSalaryTiming = computed(() => {
@@ -139,6 +161,12 @@ const forecastAdvice = computed(() => {
 
   if (!result.hasSpendingData) {
     return 'ยังไม่มีข้อมูลรายจ่ายใน 90 วันที่ผ่านมา บันทึกรายจ่ายเพิ่มแล้วน้องจะปรับการคาดการณ์ให้อัตโนมัติ'
+  }
+
+  if (result.status === 'insufficient') {
+    return result.hasFullCycleData
+      ? 'ข้อมูลครบหนึ่งรอบแล้วแต่รายการยังน้อย บันทึกต่อไปอีกหน่อยน้องจะเริ่มเตือนแนวโน้มให้'
+      : 'ค่าเฉลี่ยช่วงต้นรอบจะเหวี่ยงจากรายจ่ายก้อนใหญ่อย่างค่าหอ น้องจึงยังไม่สรุปจนกว่าจะเห็นข้อมูลครบรอบ'
   }
 
   if (result.status === 'risk') {
@@ -319,7 +347,11 @@ onBeforeUnmount(() => {
           <strong>
             {{ forecast.hasSpendingData ? formatBaht(forecast.averageDailyExpense) : 'รอข้อมูล' }}
           </strong>
-          <small v-if="forecast.hasSpendingData">
+          <small v-if="forecast.isEstimateBlended" :title="learningNote">
+            ค่าประมาณ · จริง {{ formatBaht(forecast.observedDailyExpense) }} จากข้อมูล
+            {{ forecast.historyDays }} วัน
+          </small>
+          <small v-else-if="forecast.hasSpendingData">
             {{ forecast.historyDays }} วัน · {{ forecast.expenseRecordCount }} รายการ
           </small>
           <small v-else>เริ่มจดรายจ่ายเพื่อวิเคราะห์</small>
@@ -365,6 +397,7 @@ onBeforeUnmount(() => {
       <footer>
         {{ forecastConfidenceLabel }} · คำนวณจากข้อมูลสูงสุด 90 วัน · เงินเดือนวันที่
         {{ forecast.salaryDay }} (ก.พ. ใช้วันสุดท้าย)
+        <template v-if="forecast.isEstimateBlended"> · {{ learningNote }}</template>
       </footer>
     </section>
   </section>

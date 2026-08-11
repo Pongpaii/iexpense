@@ -7,11 +7,26 @@ const MILLISECONDS_PER_DAY = 86_400_000
 const SALARY_EARLY_WINDOW_DAYS = 3
 const SALARY_LATE_WINDOW_DAYS = 1
 
+/** จำนวนวันและจำนวนรายการที่ต้องมี ก่อนจะเชื่อค่าเฉลี่ยที่สังเกตได้เต็มร้อย */
+const FULL_TRUST_DAYS = 30
+const FULL_TRUST_RECORDS = 12
+
 type ForecastConfidence = 'low' | 'medium' | 'high'
 export type ForecastStatus = 'insufficient' | 'safe' | 'watch' | 'risk'
 
 export interface FinancialForecast {
+  /** ค่าที่ใช้พยากรณ์จริง เป็นค่าผสมระหว่างข้อมูลที่สังเกตได้กับค่าอ้างอิงจากเงินเดือน */
   averageDailyExpense: number
+  /** ค่าเฉลี่ยดิบจากข้อมูลที่บันทึกไว้ ยังไม่ผสมอะไร */
+  observedDailyExpense: number
+  /** ค่าอ้างอิงตอนข้อมูลน้อย คิดจากเงินเดือนหารจำนวนวันในรอบ */
+  priorDailyExpense: number
+  /** น้ำหนักที่ให้กับข้อมูลจริง 0-1 ยิ่งใกล้ 1 ยิ่งเชื่อข้อมูลที่บันทึกไว้ */
+  estimateWeight: number
+  /** true เมื่อยังเชื่อข้อมูลจริงไม่เต็มร้อย จึงยังเป็นค่าประมาณแบบผสม */
+  isEstimateBlended: boolean
+  /** true เมื่อข้อมูลครอบคลุมครบหนึ่งรอบเงินเดือนแล้ว */
+  hasFullCycleData: boolean
   balanceAfterSalary: number
   balanceBeforeSalary: number
   confidence: ForecastConfidence
@@ -88,9 +103,13 @@ const salaryDateForMonth = (year: number, month: number, salaryDay: number) => {
 const nextMonthSalaryDate = (date: Date, salaryDay: number) =>
   salaryDateForMonth(date.getFullYear(), date.getMonth() + 1, salaryDay)
 
+/**
+ * ความมั่นใจวัดจากว่าข้อมูลครอบคลุมกี่รอบเงินเดือน ไม่ใช่แค่กี่วัน
+ * เพราะรายจ่ายก้อนใหญ่อย่างค่าหอเกิดเดือนละครั้ง เห็นครั้งเดียวยังสรุปไม่ได้
+ */
 const getConfidence = (historyDays: number, expenseRecordCount: number): ForecastConfidence => {
-  if (historyDays >= 30 && expenseRecordCount >= 10) return 'high'
-  if (historyDays >= 7 && expenseRecordCount >= 4) return 'medium'
+  if (historyDays >= FULL_TRUST_DAYS * 2 && expenseRecordCount >= 20) return 'high'
+  if (historyDays >= 14 && expenseRecordCount >= 5) return 'medium'
   return 'low'
 }
 
@@ -151,7 +170,26 @@ export const createFinancialForecast = ({
     : 0
   const expenseRecordCount = recentExpenses.length
   const hasSpendingData = expenseRecordCount > 0 && historyDays > 0
-  const averageDailyExpense = hasSpendingData ? observedExpense / historyDays : 0
+  const observedDailyExpense = hasSpendingData ? observedExpense / historyDays : 0
+
+  // ตอนข้อมูลน้อย ค่าเฉลี่ยดิบเหวี่ยงแรงมาก เช่น จ่ายค่าหอวันที่ 1 แล้วดูวันที่ 3
+  // จะได้หลักพันต่อวัน จึงถ่วงเข้าหาค่าอ้างอิงจากเงินเดือน แล้วค่อยเชื่อข้อมูลจริง
+  // มากขึ้นเมื่อเก็บข้อมูลได้ครบรอบ
+  const priorDailyExpense = normalizedSalary > 0 ? normalizedSalary / FORECAST_HORIZON_DAYS : 0
+  const estimateWeight = !hasSpendingData
+    ? 0
+    : priorDailyExpense <= 0
+      ? 1
+      : Math.min(
+          1,
+          historyDays / FULL_TRUST_DAYS,
+          expenseRecordCount / FULL_TRUST_RECORDS,
+        )
+  const averageDailyExpense = hasSpendingData
+    ? estimateWeight * observedDailyExpense + (1 - estimateWeight) * priorDailyExpense
+    : 0
+  const hasFullCycleData = historyDays >= FULL_TRUST_DAYS
+  const confidence = getConfidence(historyDays, expenseRecordCount)
 
   const likelySalaryTransactions = datedTransactions.filter(({ amount, transaction }) => {
     if (transaction.type !== 'income') return false
@@ -269,11 +307,17 @@ export const createFinancialForecast = ({
     ? Math.max(0, Math.floor(Math.max(currentBalance, 0) / averageDailyExpense))
     : null
 
+  // เตือนได้เมื่อข้อมูลพอจะสรุปเท่านั้น ยกเว้นกรณีเงินติดลบอยู่จริงซึ่งเป็น
+  // ข้อเท็จจริงวันนี้ ไม่ใช่การพยากรณ์ จึงต้องเตือนไม่ว่าข้อมูลจะน้อยแค่ไหน
+  const canJudgeTrend = hasSpendingData && confidence !== 'low'
+
   let status: ForecastStatus = 'safe'
-  if (balanceBeforeSalary < 0 || projectedBalance30Days < 0) {
+  if (currentBalance < 0) {
     status = 'risk'
-  } else if (!hasSpendingData) {
+  } else if (!canJudgeTrend) {
     status = 'insufficient'
+  } else if (balanceBeforeSalary < 0 || projectedBalance30Days < 0) {
+    status = 'risk'
   } else if (
     averageDailyExpense * FORECAST_HORIZON_DAYS > normalizedSalary ||
     averageDailyExpense > safeDailyBudget * 0.85
@@ -283,9 +327,14 @@ export const createFinancialForecast = ({
 
   return {
     averageDailyExpense,
+    observedDailyExpense,
+    priorDailyExpense,
+    estimateWeight,
+    isEstimateBlended: hasSpendingData && estimateWeight < 1,
+    hasFullCycleData,
     balanceAfterSalary,
     balanceBeforeSalary,
-    confidence: getConfidence(historyDays, expenseRecordCount),
+    confidence,
     currentBalance,
     daysUntilSalary,
     estimatedMoneyLastsDays,
