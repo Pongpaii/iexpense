@@ -76,19 +76,5 @@ export const buildCategoryBreakdown = (
   return { total, slices }
 }
 
-/** ผลจากการกดหมวดหมู่บนกราฟวงกลม ใช้ส่งไปกรองรายการในลิสต์ */
-export interface CategorySelection {
-  key: string
-  label: string
-  emoji: string
-  category: TransactionCategory | null
-  type: TransactionType
-}
-
-/** ใช้กรองรายการในลิสต์ให้ตรงกับหมวดที่กดบนกราฟวงกลม */
-export const matchesSelection = (transaction: Transaction, selection: CategorySelection) =>
-  transaction.type === selection.type &&
-  (transaction.category ?? UNCATEGORIZED_KEY) === selection.key
-
 export const formatPercent = (percentage: number) =>
   `${percentage > 0 && percentage < 1 ? percentage.toFixed(1) : percentage.toFixed(0)}%`

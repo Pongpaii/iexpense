@@ -21,7 +21,6 @@ export const getCategoryEmoji = (category: TransactionCategory | null | undefine
 export interface Transaction {
   id: number
   user_id: string
-  space_id?: string | null
   description: string
   amount: number
   type: TransactionType
@@ -34,18 +33,13 @@ export type TransactionInput = Pick<
   Transaction,
   'description' | 'amount' | 'type' | 'category' | 'transaction_date'
 >
-
-/** สมาชิกของ space ที่ใช้ร่วมกัน ใช้แสดงว่าใครเป็นคนบันทึกรายการ */
-export interface SpaceMember {
+export interface Transaction {
+  id: number
   user_id: string
-  email: string | null
-  role: 'owner' | 'member'
-}
-
-export interface SpaceSummary {
-  space_id: string
-  space_name: string
-  invite_code: string
-  member_role: 'owner' | 'member'
-  is_owner: boolean
+  description: string
+  amount: number
+  type: TransactionType
+  category: TransactionCategory | null
+  transaction_date: string
+  created_at: string
 }

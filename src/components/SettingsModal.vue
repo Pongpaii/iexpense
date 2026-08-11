@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useSalarySettings } from '../composables/useSalarySettings'
-import type { SpaceMember, SpaceSummary } from '../types/transaction'
 
 const props = withDefaults(
   defineProps<{
@@ -9,61 +8,15 @@ const props = withDefaults(
     transactionCount: number
     busy: boolean
     readOnly?: boolean
-    space?: SpaceSummary | null
-    members?: SpaceMember[]
-    spaceOptions?: { space_id: string; space_name: string }[]
-    spaceBusy?: boolean
-    spaceError?: string
   }>(),
-  {
-    readOnly: false,
-    space: null,
-    members: () => [],
-    spaceOptions: () => [],
-    spaceBusy: false,
-    spaceError: '',
-  },
+  { readOnly: false },
 )
 
 const emit = defineEmits<{
   close: []
   manage: []
   reset: []
-  joinSpace: [code: string]
-  switchSpace: [spaceId: string]
-  rotateInviteCode: []
 }>()
-
-const inviteDraft = ref('')
-const codeCopied = ref(false)
-let copyTimer: ReturnType<typeof window.setTimeout> | undefined
-
-const otherSpaces = computed(() =>
-  props.spaceOptions.filter(({ space_id }) => space_id !== props.space?.space_id),
-)
-
-const copyInviteCode = async () => {
-  const code = props.space?.invite_code
-  if (!code) return
-
-  try {
-    await navigator.clipboard.writeText(code)
-    codeCopied.value = true
-    window.clearTimeout(copyTimer)
-    copyTimer = window.setTimeout(() => {
-      codeCopied.value = false
-    }, 2500)
-  } catch {
-    codeCopied.value = false
-  }
-}
-
-const submitInvite = () => {
-  const code = inviteDraft.value.trim()
-  if (!code || props.spaceBusy) return
-  emit('joinSpace', code)
-  inviteDraft.value = ''
-}
 
 const {
   monthlySalary,
@@ -147,7 +100,6 @@ onMounted(() => window.addEventListener('keydown', handleKeydown))
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown)
   window.clearTimeout(salaryNoticeTimer)
-  window.clearTimeout(copyTimer)
 })
 </script>
 
@@ -237,73 +189,6 @@ onBeforeUnmount(() => {
                 บันทึกเงินเดือน
               </button>
             </form>
-
-            <article v-if="!readOnly && space" class="setting-card space-card">
-              <div class="setting-icon setting-icon--space" aria-hidden="true">⇄</div>
-              <div class="setting-copy space-copy">
-                <strong>แชร์ข้อมูลกับอีเมลอื่น</strong>
-                <p>
-                  ส่งรหัสเชิญให้อีกคนกรอกในหน้านี้ แล้วทั้งสองบัญชีจะเห็นและแก้ไขข้อมูลชุดเดียวกัน
-                </p>
-
-                <div class="invite-row">
-                  <code>{{ space.invite_code }}</code>
-                  <button type="button" :disabled="spaceBusy" @click="copyInviteCode">
-                    {{ codeCopied ? 'คัดลอกแล้ว' : 'คัดลอก' }}
-                  </button>
-                  <button
-                    v-if="space.is_owner"
-                    type="button"
-                    :disabled="spaceBusy"
-                    title="ออกรหัสใหม่และยกเลิกรหัสเดิม"
-                    @click="emit('rotateInviteCode')"
-                  >
-                    ออกรหัสใหม่
-                  </button>
-                </div>
-
-                <ul class="member-list">
-                  <li v-for="member in members" :key="member.user_id">
-                    <span>{{ member.email ?? 'สมาชิก' }}</span>
-                    <small>{{ member.role === 'owner' ? 'เจ้าของ' : 'สมาชิก' }}</small>
-                  </li>
-                </ul>
-
-                <form class="invite-join" @submit.prevent="submitInvite">
-                  <label for="invite-code">
-                    <span>มีรหัสเชิญจากคนอื่น?</span>
-                    <input
-                      id="invite-code"
-                      v-model="inviteDraft"
-                      type="text"
-                      autocomplete="off"
-                      spellcheck="false"
-                      placeholder="เช่น 4F2A9C71"
-                      :disabled="spaceBusy"
-                    />
-                  </label>
-                  <button type="submit" :disabled="spaceBusy || !inviteDraft.trim()">เข้าร่วม</button>
-                </form>
-
-                <div v-if="otherSpaces.length" class="space-switcher">
-                  <span>สลับกลับไปกระเป๋าอื่นของคุณ</span>
-                  <button
-                    v-for="option in otherSpaces"
-                    :key="option.space_id"
-                    type="button"
-                    :disabled="spaceBusy"
-                    @click="emit('switchSpace', option.space_id)"
-                  >
-                    {{ option.space_name }}
-                  </button>
-                </div>
-
-                <small v-if="spaceError" class="space-feedback" role="alert">{{ spaceError }}</small>
-                <small v-else>
-                  ใครก็ที่มีรหัสนี้เข้าร่วมได้ ถ้าหลุดออกไปให้กด "ออกรหัสใหม่"
-                </small>
-              </div>
-            </article>
 
             <p v-if="readOnly" class="read-only-note" role="note">
               โหมดดูตัวอย่าง: ปรับเงินเดือนเพื่อลองดูการคาดการณ์ได้ แต่แก้ไขหรือลบข้อมูลไม่ได้
@@ -431,143 +316,6 @@ onBeforeUnmount(() => {
 
 .settings-body {
   padding: 22px 26px 26px;
-}
-
-.space-card {
-  align-items: start;
-}
-
-.setting-icon--space {
-  color: #2c5f8a;
-  background: #e6f0f8;
-}
-
-.space-copy {
-  display: grid;
-  gap: 9px;
-}
-
-.invite-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-
-.invite-row code {
-  padding: 7px 12px;
-  border: 1px dashed #c3d3ca;
-  border-radius: 9px;
-  color: #22543d;
-  background: #f2f7f4;
-  font: 700 0.82rem 'Manrope', monospace;
-  letter-spacing: 0.12em;
-}
-
-.invite-row button,
-.space-switcher button,
-.invite-join button {
-  min-height: 32px;
-  padding: 6px 12px;
-  border: 1px solid #cfdcd5;
-  border-radius: 9px;
-  color: #2f5a46;
-  background: #fff;
-  font-family: 'Noto Sans Thai', sans-serif;
-  font-size: 0.62rem;
-  font-weight: 700;
-}
-
-.invite-row button:hover:not(:disabled),
-.space-switcher button:hover:not(:disabled),
-.invite-join button:hover:not(:disabled) {
-  border-color: #a7c3b3;
-  background: #f3f9f5;
-}
-
-.member-list {
-  display: grid;
-  gap: 4px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.member-list li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 6px 9px;
-  border-radius: 8px;
-  background: #f4f7f5;
-  font-family: 'Noto Sans Thai', sans-serif;
-  font-size: 0.63rem;
-}
-
-.member-list li span {
-  overflow: hidden;
-  color: #3f5349;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.member-list li small {
-  flex: 0 0 auto;
-  color: #8b968f;
-  font-size: 0.55rem;
-}
-
-.invite-join {
-  display: flex;
-  align-items: end;
-  gap: 7px;
-}
-
-.invite-join label {
-  display: grid;
-  flex: 1;
-  gap: 3px;
-}
-
-.invite-join label span {
-  color: #7d8983;
-  font-family: 'Noto Sans Thai', sans-serif;
-  font-size: 0.6rem;
-}
-
-.invite-join input {
-  min-height: 34px;
-  padding: 7px 10px;
-  border: 1px solid #d9e2dd;
-  border-radius: 9px;
-  font-family: 'Manrope', monospace;
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.invite-join input:focus-visible {
-  border-color: #8fb39f;
-  outline: 3px solid rgba(73, 137, 103, 0.18);
-  outline-offset: 0;
-}
-
-.space-switcher {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.space-switcher span {
-  color: #7d8983;
-  font-family: 'Noto Sans Thai', sans-serif;
-  font-size: 0.6rem;
-}
-
-.space-feedback {
-  color: #b4544a !important;
 }
 
 .read-only-note {

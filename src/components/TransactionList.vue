@@ -12,15 +12,9 @@ const props = withDefaults(
     bulkBusy: boolean
     emptyHint: string
     readOnly?: boolean
-    showAuthor?: boolean
-    memberLabels?: Record<string, string>
   }>(),
-  { readOnly: false, showAuthor: false, memberLabels: () => ({}) },
+  { readOnly: false },
 )
-
-/** แสดงชื่อผู้บันทึกเฉพาะเมื่อ space มีสมาชิกมากกว่าหนึ่งคน */
-const authorLabel = (transaction: Transaction) =>
-  props.showAuthor ? props.memberLabels[transaction.user_id] ?? 'สมาชิก' : ''
 
 const emit = defineEmits<{
   edit: [transaction: Transaction]
@@ -145,9 +139,6 @@ watch(
             {{ formatDate(transaction.transaction_date) }}
             <template v-if="transaction.category">
               · {{ getCategoryEmoji(transaction.category) }} {{ transaction.category }}
-            </template>
-            <template v-if="authorLabel(transaction)">
-              · 👤 {{ authorLabel(transaction) }}
             </template>
           </span>
         </div>
