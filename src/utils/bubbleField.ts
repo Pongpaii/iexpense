@@ -1,13 +1,26 @@
-import type { CategorySlice } from './categoryBreakdown'
+import type { HabitGroup } from './spendingHabits'
 
-/** ฟิสิกส์ของฟองเงิน แยกออกจากคอมโพเนนต์เพื่อให้ทดสอบและปรับค่าได้ง่าย */
+/**
+ * ฟิสิกส์และการจัดวางของฟองเงิน แยกออกจากคอมโพเนนต์เพื่อให้ทดสอบได้
+ *
+ * ขนาดฟอง = จำนวนครั้งที่จ่ายซ้ำ ไม่ใช่ยอดเงิน เพราะเป้าหมายของหน้านี้คือ
+ * ให้เห็นว่า "ใช้กับอะไรบ่อย" และฟองต้องโตพอที่จะเขียนชื่อลงไปได้จริง
+ */
 export const BUBBLE_ATTRACTION = 0.006
 export const BUBBLE_DAMPING = 0.9
 export const BUBBLE_MAX_SPEED = 6
-export const BUBBLE_MIN_RADIUS = 8
 export const POINTER_RADIUS = 120
 export const POINTER_STRENGTH = 2.4
 export const GOLDEN_ANGLE = 2.399963
+
+/**
+ * ช่วงรัศมีที่มาจากจำนวนครั้ง กว้างพอให้เห็นความต่างชัด
+ * ของที่จ่ายบ่อยจะใหญ่กว่าของที่จ่ายครั้งเดียวหลายเท่า
+ */
+export const COUNT_MIN_RADIUS = 15
+export const COUNT_MAX_RADIUS = 110
+/** จำนวนตัวอักษรต่อบรรทัดมากสุดก่อนจะเริ่มลดลงให้พอดีฟอง */
+const MAX_CHARS_PER_LINE = 18
 
 export interface Bubble {
   id: number
@@ -22,9 +35,14 @@ export interface Bubble {
   categoryKey: string
   categoryLabel: string
   emoji: string
-  description: string
-  amount: number
-  date: string
+  name: string
+  /** ข้อความที่ตัดเป็นบรรทัดพร้อมวาดในฟองแล้ว */
+  lines: string[]
+  /** ขนาดตัวอักษรของฟองนี้ ฟองที่จ่ายบ่อยได้ตัวใหญ่กว่า */
+  fontSize: number
+  count: number
+  total: number
+  lastDate: string
 }
 
 export interface ClusterLabel {
@@ -37,6 +55,8 @@ export interface ClusterLabel {
 export interface BubbleField {
   bubbles: Bubble[]
   labels: ClusterLabel[]
+  /** จำนวนฟองที่ตัดออกเพราะพื้นที่ไม่พอ */
+  omitted: number
 }
 
 export interface PointerState {
@@ -45,81 +65,195 @@ export interface PointerState {
   active: boolean
 }
 
-interface BuildOptions {
-  slices: CategorySlice[]
-  width: number
-  height: number
-  maxBubbles: number
-  /** ตำแหน่งเดิมของฟอง ใช้ให้การเปลี่ยนตัวกรองไม่กระโดด */
-  previous?: Map<number, Bubble>
-  /** ฉีดค่าสุ่มได้เพื่อให้ทดสอบผลลัพธ์ซ้ำได้ */
-  random?: () => number
+export interface LabelLayout {
+  lines: string[]
+  requiredRadius: number
 }
 
 /**
- * วางฟองเป็นกลุ่มตามหมวดหมู่แบบตาราง แล้วกระจายภายในกลุ่มด้วยมุมทอง
- * ทำให้ฟองแน่นสม่ำเสมอโดยไม่ต้องพึ่งการชนเพียงอย่างเดียว
+ * จัดชื่อเป็นไม่เกินสองบรรทัด แล้วบอกว่าฟองต้องมีรัศมีเท่าไรจึงใส่ได้พอดี
+ * รับฟังก์ชันวัดความกว้างเข้ามา เพื่อทดสอบได้โดยไม่ต้องมี canvas
  */
+export const layoutBubbleLabel = (
+  text: string,
+  fontSize: number,
+  measure: (value: string) => number,
+  maxCharsPerLine = 14,
+): LabelLayout => {
+  const source = text.trim()
+  const words = source.split(/\s+/).filter(Boolean)
+  const lines: string[] = []
+  let consumed = 0
+
+  for (const word of words) {
+    const current = lines[lines.length - 1]
+
+    if (current !== undefined && current.length + 1 + word.length <= maxCharsPerLine) {
+      lines[lines.length - 1] = `${current} ${word}`
+      consumed += word.length + 1
+      continue
+    }
+
+    if (lines.length >= 2) break
+
+    let remaining = word
+    while (remaining.length > maxCharsPerLine && lines.length < 2) {
+      lines.push(remaining.slice(0, maxCharsPerLine))
+      consumed += maxCharsPerLine
+      remaining = remaining.slice(maxCharsPerLine)
+    }
+
+    if (remaining && lines.length < 2) {
+      lines.push(remaining)
+      consumed += remaining.length
+    }
+  }
+
+  if (lines.length === 0) lines.push(source.slice(0, maxCharsPerLine))
+
+  // ยังเหลือข้อความที่ใส่ไม่หมด ต่อจุดสามจุดไว้ให้รู้ว่าถูกตัด
+  if (consumed < source.length) {
+    const last = lines.length - 1
+    const room = Math.max(1, maxCharsPerLine - 1)
+    lines[last] = `${lines[last].slice(0, room)}…`
+  }
+
+  const widest = lines.reduce((largest, line) => Math.max(largest, measure(line)), 0)
+  const lineHeight = fontSize * 1.2
+  // ข้อความต้องอยู่ในคอร์ดของวงกลม ใช้พื้นที่ได้ราว 1.5 เท่าของรัศมี
+  const radiusForWidth = widest / 1.5
+  const radiusForHeight = (lines.length * lineHeight + fontSize * 1.1) / 1.5
+
+  return {
+    lines,
+    requiredRadius: Math.ceil(Math.max(radiusForWidth, radiusForHeight) + 2),
+  }
+}
+
+interface BuildOptions {
+  groups: HabitGroup[]
+  width: number
+  height: number
+  /** จำนวนฟองมากสุดที่ยอมวาด */
+  maxBubbles: number
+  /** เพดานขนาดตัวอักษร ฟองเล็กจะได้ตัวเล็กลงตามรัศมีเอง */
+  maxFontSize: number
+  measure: (value: string, fontSize: number) => number
+  /** สัดส่วนพื้นที่เวทีที่ยอมให้ฟองกินรวมกัน กันไม่ให้แน่นจนอ่านไม่ออก */
+  areaBudgetRatio?: number
+  previous?: Map<number, Bubble>
+  random?: () => number
+}
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, value))
+
 export const buildBubbleField = ({
-  slices,
+  groups,
   width,
   height,
   maxBubbles,
+  maxFontSize,
+  measure,
+  areaBudgetRatio = 0.5,
   previous,
   random = Math.random,
 }: BuildOptions): BubbleField => {
-  if (width <= 0 || height <= 0 || slices.length === 0) return { bubbles: [], labels: [] }
+  if (width <= 0 || height <= 0 || groups.length === 0) {
+    return { bubbles: [], labels: [], omitted: 0 }
+  }
 
-  const totalItems = slices.reduce((sum, slice) => sum + slice.items.length, 0)
-  if (totalItems === 0) return { bubbles: [], labels: [] }
+  const candidates = groups.flatMap((group) => group.habits.map((habit) => ({ group, habit })))
+  if (candidates.length === 0) return { bubbles: [], labels: [], omitted: 0 }
 
-  const columns = Math.max(1, Math.min(slices.length, Math.ceil(Math.sqrt(slices.length))))
-  const rows = Math.ceil(slices.length / columns)
+  const maxCount = candidates.reduce((largest, { habit }) => Math.max(largest, habit.count), 1)
+  const budget = width * height * areaBudgetRatio
+
+  // เลือกสิ่งที่จ่ายบ่อยที่สุดก่อน แล้วหยุดเมื่อพื้นที่จะแน่นเกินไป
+  const ranked = [...candidates].sort(
+    (left, right) => right.habit.count - left.habit.count || right.habit.total - left.habit.total,
+  )
+
+  const shortlist = ranked.slice(0, maxBubbles)
+
+  // ขั้นแรกคิดขนาดเป็นสัดส่วนจากความถี่ ฟองที่จ่ายบ่อยสุดใหญ่กว่าที่จ่ายครั้งเดียวราว 3 เท่า
+  const relativeRadii = shortlist.map(
+    ({ habit }) => 1 + 2.1 * Math.sqrt(habit.count / maxCount),
+  )
+  const relativeArea = relativeRadii.reduce((sum, value) => sum + Math.PI * value * value, 0)
+  // ขั้นสองย่อทั้งชุดพร้อมกันให้พื้นที่รวมพอดีเวที สัดส่วนระหว่างฟองจึงไม่เปลี่ยน
+  const scale = Math.sqrt(budget / relativeArea)
+
+  const accepted = shortlist.map((candidate, index) => {
+    const radius = clamp(relativeRadii[index] * scale, COUNT_MIN_RADIUS, COUNT_MAX_RADIUS)
+    const bubbleFontSize = clamp(Math.round(radius * 0.26), 9, maxFontSize)
+
+    // ขั้นสามค่อยจัดชื่อให้พอดีฟองที่ได้ ถ้ายังล้นก็ลดจำนวนตัวอักษรต่อบรรทัดลงเรื่อย ๆ
+    let layout = layoutBubbleLabel(
+      candidate.habit.name,
+      bubbleFontSize,
+      (value) => measure(value, bubbleFontSize),
+      MAX_CHARS_PER_LINE,
+    )
+
+    for (
+      let maxChars = MAX_CHARS_PER_LINE - 1;
+      maxChars >= 4 && layout.requiredRadius > radius;
+      maxChars -= 1
+    ) {
+      layout = layoutBubbleLabel(
+        candidate.habit.name,
+        bubbleFontSize,
+        (value) => measure(value, bubbleFontSize),
+        maxChars,
+      )
+    }
+
+    return {
+      group: candidate.group,
+      habit: candidate.habit,
+      radius,
+      // ฟองเล็กเกินกว่าจะอ่านตัวหนังสือได้ ปล่อยว่างไว้แล้วไปโชว์ชื่อตอนชี้แทน
+      lines: layout.requiredRadius <= radius ? layout.lines : [],
+      fontSize: bubbleFontSize,
+    }
+  })
+
+  const usedGroups = groups.filter((group) =>
+    accepted.some(({ group: candidateGroup }) => candidateGroup.key === group.key),
+  )
+  const columns = Math.max(1, Math.min(usedGroups.length, Math.ceil(Math.sqrt(usedGroups.length))))
+  const rows = Math.ceil(usedGroups.length / columns)
   const cellWidth = width / columns
   const cellHeight = height / rows
-  const maxAmount = slices.reduce(
-    (largest, slice) =>
-      slice.items.reduce((value, item) => Math.max(value, Number(item.amount)), largest),
-    1,
-  )
-  const maxRadius = Math.max(
-    BUBBLE_MIN_RADIUS + 4,
-    Math.min(36, Math.min(cellWidth, cellHeight) / 5),
-  )
-  const isCapped = totalItems > maxBubbles
 
   const bubbles: Bubble[] = []
   const labels: ClusterLabel[] = []
 
-  slices.forEach((slice, groupIndex) => {
+  usedGroups.forEach((group, groupIndex) => {
     const column = groupIndex % columns
     const row = Math.floor(groupIndex / columns)
     const centerX = (column + 0.5) * cellWidth
     const centerY = (row + 0.5) * cellHeight
-    const quota = isCapped
-      ? Math.max(1, Math.round((slice.items.length / totalItems) * maxBubbles))
-      : slice.items.length
-    const spread = Math.max(maxRadius * 1.15, 16)
+    const members = accepted.filter(({ group: candidateGroup }) => candidateGroup.key === group.key)
+    const averageRadius = members.reduce((sum, { radius }) => sum + radius, 0) / members.length
 
     labels.push({
-      key: slice.key,
-      label: `${slice.emoji} ${slice.label}`,
+      key: group.key,
+      label: `${group.emoji} ${group.label}`,
       x: centerX,
       y: centerY,
     })
 
-    slice.items.slice(0, quota).forEach((item, itemIndex) => {
-      const angle = itemIndex * GOLDEN_ANGLE
-      const distance = Math.sqrt(itemIndex) * spread * 0.62
-      const homeX = clamp(centerX + Math.cos(angle) * distance, maxRadius, width - maxRadius)
-      const homeY = clamp(centerY + Math.sin(angle) * distance, maxRadius, height - maxRadius)
-      const amount = Number(item.amount)
-      const radius = BUBBLE_MIN_RADIUS
-        + (maxRadius - BUBBLE_MIN_RADIUS) * Math.sqrt(Math.max(amount, 0) / maxAmount)
-      const existing = previous?.get(item.id)
+    members.forEach(({ habit, radius, lines, fontSize: bubbleFontSize }, memberIndex) => {
+      const angle = memberIndex * GOLDEN_ANGLE
+      const distance = Math.sqrt(memberIndex) * averageRadius * 1.35
+      const homeX = clamp(centerX + Math.cos(angle) * distance, radius, Math.max(width - radius, radius))
+      const homeY = clamp(centerY + Math.sin(angle) * distance, radius, Math.max(height - radius, radius))
+      const existing = previous?.get(habit.id)
 
       bubbles.push({
-        id: item.id,
+        id: habit.id,
         x: existing?.x ?? homeX + (random() - 0.5) * 40,
         y: existing?.y ?? homeY + (random() - 0.5) * 40,
         vx: existing?.vx ?? 0,
@@ -127,22 +261,22 @@ export const buildBubbleField = ({
         homeX,
         homeY,
         radius,
-        color: slice.color,
-        categoryKey: slice.key,
-        categoryLabel: slice.label,
-        emoji: slice.emoji,
-        description: item.description,
-        amount,
-        date: item.transaction_date,
+        color: group.color,
+        categoryKey: group.key,
+        categoryLabel: group.label,
+        emoji: group.emoji,
+        name: habit.name,
+        lines,
+        fontSize: bubbleFontSize,
+        count: habit.count,
+        total: habit.total,
+        lastDate: habit.lastDate,
       })
     })
   })
 
-  return { bubbles, labels }
+  return { bubbles, labels, omitted: candidates.length - bubbles.length }
 }
-
-const clamp = (value: number, min: number, max: number) =>
-  Math.max(min, Math.min(max, value))
 
 /** เช็คการชนเฉพาะฟองที่อยู่ในช่องตารางใกล้กัน เพื่อไม่ให้ต้องเทียบทุกคู่ */
 const resolveCollisions = (bubbles: Bubble[]) => {

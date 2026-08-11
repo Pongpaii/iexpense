@@ -9,16 +9,18 @@ import {
   type ClusterLabel,
   type PointerState,
 } from '../utils/bubbleField'
-import { buildCategoryBreakdown, formatPercent } from '../utils/categoryBreakdown'
 import { formatBaht, formatDate } from '../utils/format'
+import { buildSpendingHabits } from '../utils/spendingHabits'
 
 const props = defineProps<{
   transactions: Transaction[]
 }>()
 
-/** จำกัดจำนวนฟองเพื่อให้ลื่นบนเครื่องทั่วไป ถ้าเกินจะเฉลี่ยโควตาตามสัดส่วนแต่ละหมวด */
-const MAX_BUBBLES = 240
-/** จำนวนเฟรมที่คำนวณล่วงหน้าเมื่อผู้ใช้ปิดอนิเมชัน เพื่อให้ฟองเข้าที่ก่อนวาด */
+/** จำนวนฟองมากสุด กันเครื่องช้าและกันจอแน่น */
+const MAX_BUBBLES = 60
+/** เพดานขนาดตัวอักษรของชื่อในฟอง ฟองเล็กจะได้ตัวเล็กลงเอง */
+const NAME_FONT_SIZE = 16
+/** จำนวนเฟรมที่คำนวณล่วงหน้าเมื่อผู้ใช้ปิดอนิเมชัน */
 const SETTLE_STEPS = 220
 
 const wrapper = ref<HTMLDivElement | null>(null)
@@ -30,6 +32,7 @@ const hoveredBubble = ref<Bubble | null>(null)
 const tooltipPosition = ref({ x: 0, y: 0 })
 const stageSize = ref({ width: 0, height: 0 })
 const prefersReducedMotion = ref(false)
+const omittedCount = ref(0)
 
 let bubbles: Bubble[] = []
 let labels: ClusterLabel[] = []
@@ -38,28 +41,34 @@ let resizeObserver: ResizeObserver | undefined
 let motionQuery: MediaQueryList | undefined
 const pointer: PointerState = { x: 0, y: 0, active: false }
 
-const breakdown = computed(() => buildCategoryBreakdown(props.transactions, activeType.value))
+const summary = computed(() => buildSpendingHabits(props.transactions, activeType.value))
 
-const visibleSlices = computed(() =>
+const visibleGroups = computed(() =>
   isolatedKey.value
-    ? breakdown.value.slices.filter(({ key }) => key === isolatedKey.value)
-    : breakdown.value.slices,
+    ? summary.value.groups.filter(({ key }) => key === isolatedKey.value)
+    : summary.value.groups,
 )
 
-const totalCount = computed(() =>
-  visibleSlices.value.reduce((sum, slice) => sum + slice.items.length, 0),
+const visibleHabitCount = computed(() =>
+  visibleGroups.value.reduce((sum, group) => sum + group.habits.length, 0),
 )
 
-const shownCount = computed(() => Math.min(totalCount.value, MAX_BUBBLES))
-const isCapped = computed(() => totalCount.value > MAX_BUBBLES)
 const typeLabel = computed(() => (activeType.value === 'expense' ? 'รายจ่าย' : 'รายรับ'))
-const activeBubble = computed(() => selectedBubble.value ?? hoveredBubble.value)
+
+const topHabits = computed(() =>
+  visibleGroups.value
+    .flatMap((group) => group.habits.map((habit) => ({ habit, group })))
+    .sort((left, right) => right.habit.count - left.habit.count)
+    .slice(0, 3),
+)
 
 const canvasSummary = computed(() =>
-  `ฟองสบู่ ${shownCount.value} ฟองแทน${typeLabel.value}แต่ละรายการ `
-  + `จัดกลุ่มตามหมวดหมู่ ${visibleSlices.value.length} หมวด `
+  `ฟอง ${Math.min(visibleHabitCount.value, MAX_BUBBLES)} ฟอง แต่ละฟองคือสิ่งที่จ่ายซ้ำ `
+  + `ขนาดตามจำนวนครั้ง จัดกลุ่มตามหมวดหมู่ ${visibleGroups.value.length} หมวด `
   + 'รายละเอียดทั้งหมดอ่านได้จากรายการข้อความด้านล่าง',
 )
+
+const activeBubble = computed(() => selectedBubble.value ?? hoveredBubble.value)
 
 const draw = () => {
   const element = canvas.value
@@ -72,8 +81,8 @@ const draw = () => {
   context.textBaseline = 'middle'
 
   for (const label of labels) {
-    context.fillStyle = 'rgba(35, 74, 57, 0.1)'
-    context.font = "700 15px 'Noto Sans Thai', sans-serif"
+    context.fillStyle = 'rgba(35, 74, 57, 0.09)'
+    context.font = "700 16px 'Noto Sans Thai', sans-serif"
     context.fillText(label.label, label.x, label.y)
   }
 
@@ -88,29 +97,50 @@ const draw = () => {
     context.fillStyle = bubble.color
     context.fill()
     context.lineWidth = isActive ? 3 : 1
-    context.strokeStyle = isActive ? '#1c4a37' : 'rgba(255, 255, 255, 0.75)'
+    context.strokeStyle = isActive ? '#12301f' : 'rgba(255, 255, 255, 0.7)'
     context.stroke()
 
-    // ไฮไลต์เล็ก ๆ ด้านซ้ายบนให้ดูเป็นฟองมีมิติ
     context.beginPath()
     context.arc(
-      bubble.x - bubble.radius * 0.3,
-      bubble.y - bubble.radius * 0.32,
-      Math.max(1.5, bubble.radius * 0.24),
+      bubble.x - bubble.radius * 0.32,
+      bubble.y - bubble.radius * 0.34,
+      Math.max(2, bubble.radius * 0.2),
       0,
       Math.PI * 2,
     )
-    context.fillStyle = 'rgba(255, 255, 255, 0.42)'
+    context.fillStyle = 'rgba(255, 255, 255, 0.34)'
     context.fill()
 
-    if (bubble.radius >= 17) {
-      context.fillStyle = 'rgba(255, 255, 255, 0.95)'
-      context.font = `700 ${Math.round(bubble.radius * 0.62)}px 'Manrope', sans-serif`
-      context.fillText(bubble.emoji, bubble.x, bubble.y + 1)
-    }
+    drawBubbleText(context, bubble)
   }
 
   context.globalAlpha = 1
+}
+
+/** เขียนชื่อกลางฟอง พร้อมจำนวนครั้งไว้บรรทัดล่าง */
+const drawBubbleText = (context: CanvasRenderingContext2D, bubble: Bubble) => {
+  const lineHeight = bubble.fontSize * 1.2
+  const countLabel = `×${bubble.count}`
+  const blockHeight = bubble.lines.length * lineHeight + bubble.fontSize * 1.05
+  let cursorY = bubble.y - blockHeight / 2 + lineHeight / 2
+
+  context.font = `700 ${bubble.fontSize}px 'Noto Sans Thai', sans-serif`
+  context.lineJoin = 'round'
+  context.lineWidth = 2.6
+  context.strokeStyle = 'rgba(16, 43, 31, 0.45)'
+
+  for (const line of bubble.lines) {
+    context.strokeText(line, bubble.x, cursorY)
+    context.fillStyle = '#ffffff'
+    context.fillText(line, bubble.x, cursorY)
+    cursorY += lineHeight
+  }
+
+  context.font = `800 ${Math.round(bubble.fontSize * 0.92)}px 'Manrope', sans-serif`
+  context.lineWidth = 2.4
+  context.strokeText(countLabel, bubble.x, cursorY + 1)
+  context.fillStyle = 'rgba(255, 255, 255, 0.92)'
+  context.fillText(countLabel, bubble.x, cursorY + 1)
 }
 
 const step = () => {
@@ -171,16 +201,25 @@ const syncCanvasSize = () => {
 }
 
 const rebuildField = () => {
+  const context = canvas.value?.getContext('2d')
+  if (!context) return
+
   const field = buildBubbleField({
-    slices: visibleSlices.value,
+    groups: visibleGroups.value,
     width: stageSize.value.width,
     height: stageSize.value.height,
     maxBubbles: MAX_BUBBLES,
+    maxFontSize: NAME_FONT_SIZE,
+    measure: (value: string, size: number) => {
+      context.font = `700 ${size}px 'Noto Sans Thai', sans-serif`
+      return context.measureText(value).width
+    },
     previous: new Map(bubbles.map((bubble) => [bubble.id, bubble])),
   })
 
   bubbles = field.bubbles
   labels = field.labels
+  omittedCount.value = field.omitted
 
   if (selectedBubble.value && !bubbles.some(({ id }) => id === selectedBubble.value?.id)) {
     selectedBubble.value = null
@@ -258,7 +297,7 @@ const handleMotionPreferenceChange = (event: MediaQueryListEvent) => {
   startAnimation()
 }
 
-watch(visibleSlices, () => {
+watch(visibleGroups, () => {
   rebuildField()
   startAnimation()
 })
@@ -302,18 +341,31 @@ onBeforeUnmount(() => {
             รายรับ
           </button>
         </div>
-        <button class="shake-button" type="button" :disabled="totalCount === 0" @click="shakeBubbles">
+        <button
+          class="shake-button"
+          type="button"
+          :disabled="visibleHabitCount === 0"
+          @click="shakeBubbles"
+        >
           เขย่าฟอง
         </button>
       </div>
     </header>
 
     <p class="bubble-hint">
-      ฟองใหญ่คือรายการที่จ่ายหนัก สีเดียวกันคือหมวดเดียวกัน เอาเมาส์ไปกวนให้ฟองหลบ
-      แล้วกดฟองเพื่อปักหมุดดูรายละเอียด
+      ฟองใหญ่ = สิ่งที่จ่ายบ่อยที่สุด ตัวเลข ×N คือจำนวนครั้ง ไม่ใช่ยอดเงิน
+      สีเดียวกันคือหมวดเดียวกัน กวนด้วยเมาส์ได้ กดฟองเพื่อดูยอดรวมและครั้งล่าสุด
     </p>
 
-    <div v-if="totalCount > 0" ref="wrapper" class="bubble-stage">
+    <p v-if="topHabits.length" class="bubble-top" role="status">
+      จ่ายบ่อยสุด:
+      <b v-for="(entry, index) in topHabits" :key="entry.habit.id">
+        {{ index > 0 ? ' · ' : '' }}{{ entry.group.emoji }} {{ entry.habit.name }}
+        ({{ entry.habit.count }} ครั้ง)
+      </b>
+    </p>
+
+    <div v-if="visibleHabitCount > 0" ref="wrapper" class="bubble-stage">
       <canvas
         ref="canvas"
         role="img"
@@ -327,55 +379,55 @@ onBeforeUnmount(() => {
         v-if="activeBubble"
         class="bubble-tooltip"
         :style="{
-          left: `${Math.min(Math.max(tooltipPosition.x, 96), Math.max(stageSize.width - 96, 96))}px`,
+          left: `${Math.min(Math.max(tooltipPosition.x, 100), Math.max(stageSize.width - 100, 100))}px`,
           top: `${Math.max(tooltipPosition.y - 18, 10)}px`,
         }"
         role="status"
       >
-        <strong>{{ activeBubble.description }}</strong>
-        <span>{{ formatBaht(activeBubble.amount) }}</span>
+        <strong>{{ activeBubble.name }}</strong>
+        <span>{{ activeBubble.count }} ครั้ง · รวม {{ formatBaht(activeBubble.total) }}</span>
         <small>
-          {{ activeBubble.emoji }} {{ activeBubble.categoryLabel }} ·
-          {{ formatDate(activeBubble.date) }}
+          เฉลี่ยครั้งละ {{ formatBaht(activeBubble.total / activeBubble.count) }} ·
+          ล่าสุด {{ formatDate(activeBubble.lastDate) }}
         </small>
-        <em v-if="selectedBubble">ปักหมุดไว้ · กดฟองเดิมอีกครั้งเพื่อปล่อย</em>
+        <em>{{ activeBubble.emoji }} {{ activeBubble.categoryLabel }}</em>
       </div>
     </div>
 
     <div v-else class="bubble-empty">
       <div aria-hidden="true">○</div>
       <strong>ยังไม่มี{{ typeLabel }}ให้เป่าเป็นฟอง</strong>
-      <p>บันทึกรายการแล้วกลับมาดูอีกครั้ง แต่ละรายการจะกลายเป็นฟองหนึ่งฟอง</p>
+      <p>บันทึกรายการแล้วกลับมาดูอีกครั้ง รายการที่ชื่อซ้ำกันจะรวมเป็นฟองเดียวและโตขึ้นตามจำนวนครั้ง</p>
     </div>
 
-    <ul v-if="breakdown.slices.length" class="bubble-legend">
-      <li v-for="slice in breakdown.slices" :key="slice.key">
+    <ul v-if="summary.groups.length" class="bubble-legend">
+      <li v-for="group in summary.groups" :key="group.key">
         <button
           type="button"
-          :class="{ 'is-active': isolatedKey === slice.key }"
-          :aria-pressed="isolatedKey === slice.key"
-          @click="toggleIsolate(slice.key)"
+          :class="{ 'is-active': isolatedKey === group.key }"
+          :aria-pressed="isolatedKey === group.key"
+          @click="toggleIsolate(group.key)"
         >
-          <i :style="{ background: slice.color }" aria-hidden="true"></i>
-          <b>{{ slice.emoji }} {{ slice.label }}</b>
-          <small>{{ slice.items.length }} ฟอง · {{ formatPercent(slice.percentage) }}</small>
+          <i :style="{ background: group.color }" aria-hidden="true"></i>
+          <b>{{ group.emoji }} {{ group.label }}</b>
+          <small>{{ group.count }} ครั้ง · {{ group.habits.length }} อย่าง</small>
         </button>
       </li>
     </ul>
 
-    <p v-if="isCapped" class="bubble-note" role="note">
-      รายการเยอะมาก แสดง {{ shownCount }} ฟองจาก {{ totalCount }} รายการ
-      โดยแบ่งโควตาตามสัดส่วนของแต่ละหมวด
+    <p v-if="omittedCount > 0" class="bubble-note" role="note">
+      พื้นที่ไม่พอสำหรับทุกอย่าง ซ่อนไว้ {{ omittedCount }} รายการที่จ่ายน้อยครั้งที่สุด
+      กดชิปหมวดหมู่เพื่อดูเฉพาะหมวดนั้นแล้วจะเห็นครบขึ้น
     </p>
 
-    <details v-if="totalCount > 0" class="bubble-fallback">
+    <details v-if="visibleHabitCount > 0" class="bubble-fallback">
       <summary>ดูเป็นรายการข้อความ (สำหรับคีย์บอร์ดและโปรแกรมอ่านหน้าจอ)</summary>
-      <div v-for="slice in visibleSlices" :key="slice.key" class="fallback-group">
-        <h2>{{ slice.emoji }} {{ slice.label }} · {{ formatBaht(slice.amount) }}</h2>
+      <div v-for="group in visibleGroups" :key="group.key" class="fallback-group">
+        <h2>{{ group.emoji }} {{ group.label }} · {{ group.count }} ครั้ง · {{ formatBaht(group.total) }}</h2>
         <ul>
-          <li v-for="item in slice.items" :key="item.id">
-            {{ item.description }} · {{ formatBaht(Number(item.amount)) }} ·
-            {{ formatDate(item.transaction_date) }}
+          <li v-for="habit in group.habits" :key="habit.id">
+            {{ habit.name }} · {{ habit.count }} ครั้ง · รวม {{ formatBaht(habit.total) }} ·
+            ล่าสุด {{ formatDate(habit.lastDate) }}
           </li>
         </ul>
       </div>
@@ -463,15 +515,26 @@ onBeforeUnmount(() => {
 }
 
 .bubble-hint {
-  margin: 9px 0 11px;
+  margin: 9px 0 8px;
   color: #83908a;
   font: 500 0.6rem 'Noto Sans Thai', sans-serif;
   line-height: 1.5;
 }
 
+.bubble-top {
+  margin: 0 0 11px;
+  color: #5e6f67;
+  font: 500 0.62rem 'Noto Sans Thai', sans-serif;
+}
+
+.bubble-top b {
+  color: #2f4a3d;
+  font-weight: 700;
+}
+
 .bubble-stage {
   position: relative;
-  height: clamp(340px, 58vh, 620px);
+  height: clamp(360px, 60vh, 640px);
   overflow: hidden;
   border: 1px solid #e4ece7;
   border-radius: 14px;
@@ -491,8 +554,8 @@ onBeforeUnmount(() => {
   z-index: 3;
   display: grid;
   gap: 1px;
-  max-width: 200px;
-  padding: 7px 10px;
+  max-width: 210px;
+  padding: 8px 11px;
   border: 1px solid #d9e4de;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.97);
@@ -503,26 +566,25 @@ onBeforeUnmount(() => {
 }
 
 .bubble-tooltip strong {
-  overflow: hidden;
   color: #2c4438;
-  font-size: 0.66rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 0.68rem;
+  line-height: 1.35;
 }
 
 .bubble-tooltip span {
   color: #1f5540;
-  font: 700 0.72rem 'Manrope', sans-serif;
+  font: 700 0.66rem 'Noto Sans Thai', sans-serif;
 }
 
 .bubble-tooltip small {
   color: #8d9791;
-  font-size: 0.53rem;
+  font-size: 0.55rem;
+  line-height: 1.45;
 }
 
 .bubble-tooltip em {
   color: #6f8a7b;
-  font-size: 0.5rem;
+  font-size: 0.53rem;
   font-style: normal;
 }
 
@@ -557,9 +619,10 @@ onBeforeUnmount(() => {
 }
 
 .bubble-empty p {
-  max-width: 320px;
+  max-width: 340px;
   margin: 0;
   font-size: 0.6rem;
+  line-height: 1.5;
 }
 
 .bubble-legend {
@@ -620,6 +683,7 @@ onBeforeUnmount(() => {
   margin: 9px 0 0;
   color: #8b968f;
   font: 500 0.56rem 'Noto Sans Thai', sans-serif;
+  line-height: 1.5;
 }
 
 .bubble-fallback {
@@ -651,7 +715,7 @@ onBeforeUnmount(() => {
 
 @media (max-width: 580px) {
   .bubble-panel { padding: 14px; }
-  .bubble-stage { height: clamp(300px, 52vh, 460px); }
+  .bubble-stage { height: clamp(320px, 54vh, 480px); }
   .bubble-heading h1 { font-size: 0.98rem; }
 }
 </style>
