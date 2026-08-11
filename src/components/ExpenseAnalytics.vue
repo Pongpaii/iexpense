@@ -1,14 +1,26 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Transaction } from '../types/transaction'
-import { buildCategoryBreakdown, formatPercent } from '../utils/categoryBreakdown'
+import {
+  buildCategoryBreakdown,
+  formatPercent,
+  type CategorySelection,
+} from '../utils/categoryBreakdown'
 import { formatBaht } from '../utils/format'
 import CategoryDonut from './CategoryDonut.vue'
 
-const props = defineProps<{
-  transactions: Transaction[]
-  previousTransactions: Transaction[]
-  monthLabel: string
+const props = withDefaults(
+  defineProps<{
+    transactions: Transaction[]
+    previousTransactions: Transaction[]
+    monthLabel: string
+    activeKey?: string | null
+  }>(),
+  { activeKey: null },
+)
+
+const emit = defineEmits<{
+  select: [selection: CategorySelection | null]
 }>()
 
 const sumExpenses = (transactions: Transaction[]) =>
@@ -55,7 +67,9 @@ const comparisonTone = computed(() => {
       :transactions="transactions"
       type="expense"
       :framed="false"
+      :active-key="activeKey"
       empty-hint="เมื่อเพิ่มรายการรายจ่าย ระบบจะแยกสัดส่วนตามหมวดหมู่ให้ทันที"
+      @select="emit('select', $event)"
     />
 
     <p v-if="topCategory" class="top-category">
