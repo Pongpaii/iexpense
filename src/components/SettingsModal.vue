@@ -2,11 +2,15 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useSalarySettings } from '../composables/useSalarySettings'
 
-const props = defineProps<{
-  open: boolean
-  transactionCount: number
-  busy: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    open: boolean
+    transactionCount: number
+    busy: boolean
+    readOnly?: boolean
+  }>(),
+  { readOnly: false },
+)
 
 const emit = defineEmits<{
   close: []
@@ -186,7 +190,11 @@ onBeforeUnmount(() => {
               </button>
             </form>
 
-            <article class="setting-card">
+            <p v-if="readOnly" class="read-only-note" role="note">
+              โหมดดูตัวอย่าง: ปรับเงินเดือนเพื่อลองดูการคาดการณ์ได้ แต่แก้ไขหรือลบข้อมูลไม่ได้
+            </p>
+
+            <article v-if="!readOnly" class="setting-card">
               <div class="setting-icon setting-icon--manage" aria-hidden="true">✓</div>
               <div class="setting-copy">
                 <strong>เลือกลบรายการ</strong>
@@ -203,7 +211,7 @@ onBeforeUnmount(() => {
               </button>
             </article>
 
-            <div class="danger-zone">
+            <div v-if="!readOnly" class="danger-zone">
               <div class="danger-heading">
                 <span>Danger zone</span>
                 <p>การดำเนินการส่วนนี้ไม่สามารถย้อนกลับได้</p>
@@ -308,6 +316,18 @@ onBeforeUnmount(() => {
 
 .settings-body {
   padding: 22px 26px 26px;
+}
+
+.read-only-note {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border: 1px solid #e6dcc1;
+  border-radius: 11px;
+  color: #86702f;
+  background: #fcf7e8;
+  font-family: 'Noto Sans Thai', sans-serif;
+  font-size: 0.66rem;
+  line-height: 1.55;
 }
 
 .setting-card {
