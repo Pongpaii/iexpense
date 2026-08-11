@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 
 const props = defineProps<{
@@ -15,7 +15,25 @@ const loading = ref(false)
 const sent = ref(false)
 const errorMessage = ref('')
 
+const cooldown = ref(0)
+let cooldownTimer: number | undefined
+
 const displayedError = computed(() => errorMessage.value || props.initialError || '')
+
+const startCooldown = (seconds: number) => {
+  cooldown.value = seconds
+  window.clearInterval(cooldownTimer)
+  cooldownTimer = window.setInterval(() => {
+    cooldown.value -= 1
+    if (cooldown.value <= 0) window.clearInterval(cooldownTimer)
+  }, 1000)
+}
+
+/** Supabase ใช้ SMTP กลางที่จำกัดการส่งไว้ไม่กี่ฉบับต่อชั่วโมง จึงต้องอธิบายให้ชัด */
+const isRateLimitError = (message: string) =>
+  /rate limit|too many requests|429|for security purposes/i.test(message)
+
+onBeforeUnmount(() => window.clearInterval(cooldownTimer))
 
 const signIn = async () => {
   if (!supabase) {
@@ -24,7 +42,7 @@ const signIn = async () => {
   }
 
   const normalizedEmail = email.value.trim()
-  if (!normalizedEmail || loading.value) return
+  if (!normalizedEmail || loading.value || cooldown.value > 0) return
 
   loading.value = true
   errorMessage.value = ''
@@ -41,10 +59,19 @@ const signIn = async () => {
 
     if (error) throw error
     sent.value = true
+    startCooldown(60)
   } catch (error) {
-    errorMessage.value = error instanceof Error
-      ? error.message
-      : 'ส่งลิงก์เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่'
+    const rawMessage = error instanceof Error ? error.message : ''
+
+    if (isRateLimitError(rawMessage)) {
+      errorMessage.value =
+        'ส่งอีเมลถี่เกินกำหนด Supabase จำกัดการส่งเมลของระบบไว้ที่ 2 ฉบับต่อชั่วโมง '
+        + 'รอสักครู่แล้วลองใหม่ หรือเข้าดูตัวอย่างแอปด้านล่างระหว่างรอ '
+        + '(แก้ถาวรได้ด้วยการตั้ง custom SMTP หรือเพิ่ม rate limit ใน Supabase)'
+      startCooldown(90)
+    } else {
+      errorMessage.value = rawMessage || 'ส่งลิงก์เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่'
+    }
   } finally {
     loading.value = false
   }
@@ -104,9 +131,13 @@ const requestAnotherLink = () => {
 
         <p v-if="displayedError" class="auth-error" role="alert">{{ displayedError }}</p>
 
-        <button class="primary-button" type="submit" :disabled="loading || !email.trim()">
+        <button
+          class="primary-button"
+          type="submit"
+          :disabled="loading || !email.trim() || cooldown > 0"
+        >
           <span v-if="loading" class="auth-spinner" aria-hidden="true"></span>
-          {{ loading ? 'กำลังส่งลิงก์...' : 'รับ Magic Link' }}
+          {{ loading ? 'กำลังส่งลิงก์...' : cooldown > 0 ? `ลองใหม่ได้ในอีก ${cooldown} วินาที` : 'รับ Magic Link' }}
         </button>
       </form>
 
