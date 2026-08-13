@@ -80,6 +80,18 @@ const downloadCsv = (filename: string, content: string) => {
   window.setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
+const browserShareFallbackErrors = new Set([
+  'NotAllowedError',
+  'SecurityError',
+  'NotSupportedError',
+  'DataError',
+])
+
+const shouldFallbackToDownload = (error: unknown) => {
+  if (error instanceof DOMException && browserShareFallbackErrors.has(error.name)) return true
+  return error instanceof Error && /^permission denied\.?$/i.test(error.message.trim())
+}
+
 export const exportMonthlyCsv = async (
   summary: MonthlyExportSummary,
 ): Promise<MonthlyExportResult> => {
@@ -102,6 +114,10 @@ export const exportMonthlyCsv = async (
       return 'shared'
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return 'cancelled'
+      if (shouldFallbackToDownload(error)) {
+        downloadCsv(filename, content)
+        return 'downloaded'
+      }
       throw error
     }
   }
