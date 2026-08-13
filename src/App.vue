@@ -16,6 +16,7 @@ import TransactionList from './components/TransactionList.vue'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import type { Transaction, TransactionInput, TransactionType } from './types/transaction'
 import { createDemoTransactions, DEMO_USER_EMAIL } from './utils/demoData'
+import { exportMonthlyCsv } from './utils/monthlyExport'
 
 type ViewMode = 'month' | 'all'
 type AppPage = 'record' | 'overview' | 'bubbles'
@@ -43,6 +44,7 @@ const formVersion = ref(0)
 const loading = ref(false)
 const saving = ref(false)
 const bulkBusy = ref(false)
+const exportBusy = ref(false)
 const busyId = ref<number | null>(null)
 const errorMessage = ref('')
 const successMessage = ref('')
@@ -58,6 +60,7 @@ const viewMode = ref<ViewMode>('month')
 const todayDate = toLocalIsoDate(new Date())
 const selectedOverviewMonth = ref(todayDate.slice(0, 7))
 const selectedRecordDate = ref(todayDate)
+const isOverviewMonthValid = computed(() => /^\d{4}-(0[1-9]|1[0-2])$/.test(selectedOverviewMonth.value))
 let undoTimer: ReturnType<typeof window.setTimeout> | undefined
 let unsubscribeAuth: (() => void) | undefined
 
@@ -69,7 +72,7 @@ const recordTransactions = computed(() =>
 
 const filteredTransactions = computed(() => {
   if (viewMode.value === 'all') return transactions.value
-  if (!/^\d{4}-\d{2}$/.test(selectedOverviewMonth.value)) return []
+  if (!isOverviewMonthValid.value) return []
 
   return transactions.value.filter(({ transaction_date }) =>
     transaction_date.startsWith(selectedOverviewMonth.value),
@@ -78,7 +81,7 @@ const filteredTransactions = computed(() => {
 
 const overviewPeriodLabel = computed(() => {
   if (viewMode.value === 'all') return 'เงินทั้งหมด'
-  if (!/^\d{4}-\d{2}$/.test(selectedOverviewMonth.value)) return 'เลือกเดือน'
+  if (!isOverviewMonthValid.value) return 'เลือกเดือน'
 
   return new Intl.DateTimeFormat('th-TH', {
     month: 'long',
@@ -87,7 +90,7 @@ const overviewPeriodLabel = computed(() => {
 })
 
 const previousOverviewMonth = computed(() => {
-  if (!/^\d{4}-\d{2}$/.test(selectedOverviewMonth.value)) return ''
+  if (!isOverviewMonthValid.value) return ''
   const [year, month] = selectedOverviewMonth.value.split('-').map(Number)
   const previous = new Date(year, month - 2, 1)
   return `${previous.getFullYear()}-${String(previous.getMonth() + 1).padStart(2, '0')}`
@@ -112,7 +115,7 @@ const sumTransactions = (items: Transaction[], type: TransactionType) =>
 const income = computed(() => sumTransactions(filteredTransactions.value, 'income'))
 const expense = computed(() => sumTransactions(filteredTransactions.value, 'expense'))
 const openingBalance = computed(() => {
-  if (viewMode.value !== 'month' || !/^\d{4}-\d{2}$/.test(selectedOverviewMonth.value)) return 0
+  if (viewMode.value !== 'month' || !isOverviewMonthValid.value) return 0
 
   const monthStart = `${selectedOverviewMonth.value}-01`
   const transactionsBeforeMonth = transactions.value.filter(
@@ -190,6 +193,44 @@ const showMessage = (message: string) => {
   window.setTimeout(() => {
     if (successMessage.value === message) successMessage.value = ''
   }, 3000)
+}
+
+const handleMonthlyExport = async () => {
+  if (exportBusy.value || viewMode.value !== 'month') return
+
+  if (!isOverviewMonthValid.value) {
+    errorMessage.value = 'กรุณาเลือกเดือนที่ต้องการส่งออกให้ถูกต้อง'
+    return
+  }
+
+  if (filteredTransactions.value.length === 0) {
+    errorMessage.value = 'เดือนนี้ยังไม่มีข้อมูลให้ส่งออก'
+    return
+  }
+
+  exportBusy.value = true
+  errorMessage.value = ''
+
+  try {
+    const result = await exportMonthlyCsv({
+      month: selectedOverviewMonth.value,
+      monthLabel: overviewPeriodLabel.value,
+      transactions: filteredTransactions.value,
+      openingBalance: openingBalance.value,
+      income: income.value,
+      expense: expense.value,
+      closingBalance: balance.value,
+    })
+
+    if (result === 'downloaded') showMessage('ดาวน์โหลดรายงาน CSV เรียบร้อยแล้ว')
+    if (result === 'shared') showMessage('สร้างรายงานพร้อมแชร์เรียบร้อยแล้ว')
+  } catch (error) {
+    errorMessage.value = error instanceof Error
+      ? `ส่งออกรายงานไม่สำเร็จ: ${error.message}`
+      : 'ส่งออกรายงานไม่สำเร็จ กรุณาลองอีกครั้ง'
+  } finally {
+    exportBusy.value = false
+  }
 }
 
 const clearUndo = () => {
@@ -429,6 +470,7 @@ const clearAuthenticatedState = () => {
   loading.value = false
   saving.value = false
   bulkBusy.value = false
+  exportBusy.value = false
   undoBusy.value = false
   busyId.value = null
   errorMessage.value = ''
@@ -765,6 +807,26 @@ onBeforeUnmount(() => {
                   aria-label="เลือกเดือนที่ต้องการดู"
                 />
               </label>
+
+              <button
+                v-if="viewMode === 'month'"
+                class="export-button"
+                type="button"
+                :disabled="exportBusy || !isOverviewMonthValid || filteredTransactions.length === 0"
+                :title="!isOverviewMonthValid
+                  ? 'กรุณาเลือกเดือนให้ถูกต้อง'
+                  : filteredTransactions.length === 0
+                    ? 'เดือนนี้ยังไม่มีข้อมูลให้ส่งออก'
+                    : 'ส่งออกรายงานประจำเดือนเป็นไฟล์ CSV'"
+                @click="handleMonthlyExport"
+              >
+                <span v-if="exportBusy" class="export-spinner" aria-hidden="true"></span>
+                <svg v-else viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 3v11m0 0 4-4m-4 4-4-4M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" />
+                </svg>
+                <span>{{ exportBusy ? 'กำลังสร้างไฟล์' : 'Export CSV' }}</span>
+                <small v-if="!exportBusy">{{ filteredTransactions.length }} รายการ</small>
+              </button>
             </div>
           </div>
 
@@ -1256,6 +1318,65 @@ onBeforeUnmount(() => {
 .month-picker input:focus {
   border-color: #6d9c83;
   box-shadow: 0 0 0 3px rgba(73, 137, 103, 0.12);
+}
+
+.export-button {
+  display: flex;
+  grid-column: 1 / -1;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 11px;
+  border: 1px solid #194d3b;
+  border-radius: 10px;
+  color: #fff;
+  background: linear-gradient(135deg, #194d3b, #286b4f);
+  box-shadow: 0 6px 16px rgba(25, 77, 59, 0.16);
+  font-family: 'Noto Sans Thai', sans-serif;
+  font-size: 0.66rem;
+  font-weight: 800;
+  transition: transform 0.16s, box-shadow 0.16s, opacity 0.16s;
+}
+
+.export-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(25, 77, 59, 0.22);
+}
+
+.export-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+  box-shadow: none;
+}
+
+.export-button svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.export-button small {
+  margin-left: auto;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: #194d3b;
+  background: var(--lime);
+  font-size: 0.52rem;
+  font-weight: 800;
+}
+
+.export-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
 }
 
 .overview-workspace {
