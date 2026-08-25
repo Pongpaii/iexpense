@@ -5,6 +5,7 @@ import AuthGate from './components/AuthGate.vue'
 import CashFlowChart from './components/CashFlowChart.vue'
 import BubbleGalaxy from './components/BubbleGalaxy.vue'
 import CategoryDonut from './components/CategoryDonut.vue'
+import DailyCapBar from './components/DailyCapBar.vue'
 import EditTransactionModal from './components/EditTransactionModal.vue'
 import ExpenseAnalytics from './components/ExpenseAnalytics.vue'
 import MoneyBuddy from './components/MoneyBuddy.vue'
@@ -728,6 +729,14 @@ onBeforeUnmount(() => {
           />
 
           <section class="today-column" aria-label="รายการวันนี้">
+            <DailyCapBar
+              class="record-cap"
+              :date="selectedRecordDate"
+              :spent="recordExpense"
+              :is-today="isRecordToday"
+              @edit="settingsOpen = true"
+            />
+
             <SummaryCards
               :balance="recordBalance"
               :income="recordIncome"

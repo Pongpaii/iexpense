@@ -1,7 +1,18 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useDailyReminder } from '../composables/useDailyReminder'
 import { useSalarySettings } from '../composables/useSalarySettings'
+import {
+  createPlanItemId,
+  dayKindEmojis,
+  dayKindLabels,
+  MAX_PLAN_ITEMS,
+  sumPlanItems,
+  useDailyCap,
+  type CapPlanItem,
+  type DayKind,
+} from '../composables/useDailyCap'
+import { formatBaht } from '../utils/format'
 
 const props = withDefaults(
   defineProps<{
@@ -34,6 +45,13 @@ const {
   initializeDailyReminder,
   updateDailyReminder,
 } = useDailyReminder()
+const {
+  capSettings,
+  capEnabled,
+  saveProfile,
+  setCapEnabled,
+  resetProfile,
+} = useDailyCap()
 const confirmingReset = ref(false)
 const salaryDraft = ref<number | string>(monthlySalary.value)
 const salaryError = ref('')
@@ -43,6 +61,115 @@ const reminderTimeDraft = ref(reminderTime.value)
 const reminderFeedback = ref('')
 const reminderFeedbackIsError = ref(false)
 let salaryNoticeTimer: ReturnType<typeof window.setTimeout> | undefined
+
+interface CapProfileDraft {
+  cap: number | string
+  items: CapPlanItem[]
+}
+
+const capKindOrder: DayKind[] = ['weekday', 'weekend']
+const capKindDraft = ref<DayKind>('weekday')
+const capEnabledDraft = ref(capEnabled.value)
+const capDrafts = ref<Record<DayKind, CapProfileDraft>>({
+  weekday: { cap: 0, items: [] },
+  weekend: { cap: 0, items: [] },
+})
+const capFeedback = ref('')
+const capFeedbackIsError = ref(false)
+
+const cloneCapDrafts = (): Record<DayKind, CapProfileDraft> => ({
+  weekday: {
+    cap: capSettings.value.weekday.cap,
+    items: capSettings.value.weekday.items.map((item) => ({ ...item })),
+  },
+  weekend: {
+    cap: capSettings.value.weekend.cap,
+    items: capSettings.value.weekend.items.map((item) => ({ ...item })),
+  },
+})
+
+capDrafts.value = cloneCapDrafts()
+
+const activeCapDraft = computed(() => capDrafts.value[capKindDraft.value])
+const activeCapPlanTotal = computed(() => sumPlanItems(activeCapDraft.value.items))
+const activeCapSpare = computed(
+  () => Math.round((Number(activeCapDraft.value.cap || 0) - activeCapPlanTotal.value) * 100) / 100,
+)
+
+const clearCapFeedback = () => {
+  capFeedback.value = ''
+  capFeedbackIsError.value = false
+}
+
+const addPlanItem = () => {
+  if (activeCapDraft.value.items.length >= MAX_PLAN_ITEMS) {
+    capFeedback.value = `เพิ่มรายการในแผนได้สูงสุด ${MAX_PLAN_ITEMS} รายการ`
+    capFeedbackIsError.value = true
+    return
+  }
+
+  clearCapFeedback()
+  activeCapDraft.value.items.push({
+    id: createPlanItemId(),
+    emoji: '💸',
+    label: '',
+    amount: 0,
+  })
+}
+
+const removePlanItem = (id: string) => {
+  clearCapFeedback()
+  activeCapDraft.value.items = activeCapDraft.value.items.filter((item) => item.id !== id)
+}
+
+const usePlanTotalAsCap = () => {
+  clearCapFeedback()
+  activeCapDraft.value.cap = activeCapPlanTotal.value
+}
+
+const submitDailyCap = () => {
+  clearCapFeedback()
+  setCapEnabled(capEnabledDraft.value)
+
+  if (!capEnabledDraft.value) {
+    capFeedback.value = 'ปิดงบรายวันแล้ว หลอดจะซ่อนไว้จนกว่าจะเปิดอีกครั้ง'
+    return
+  }
+
+  let persisted = true
+
+  for (const kind of capKindOrder) {
+    const draft = capDrafts.value[kind]
+    const result = saveProfile(kind, {
+      cap: Number(draft.cap),
+      items: draft.items.map((item) => ({ ...item, amount: Number(item.amount) })),
+    })
+
+    if (!result.ok) {
+      capFeedbackIsError.value = true
+      capFeedback.value = result.reason === 'invalid-cap'
+        ? `เพดานงบของ${dayKindLabels[kind]} ต้องมากกว่า 0 บาท`
+        : `จำนวนเงินในแผนของ${dayKindLabels[kind]} ไม่ถูกต้อง`
+      capKindDraft.value = kind
+      return
+    }
+
+    persisted = persisted && result.persisted
+  }
+
+  capDrafts.value = cloneCapDrafts()
+  capFeedback.value = persisted
+    ? 'บันทึกงบรายวันแล้ว หลอดจะอัปเดตทันที'
+    : 'ใช้ค่านี้ในรอบปัจจุบัน แต่เบราว์เซอร์ไม่อนุญาตให้บันทึกถาวร'
+}
+
+const restoreDefaultCap = () => {
+  const kind = capKindDraft.value
+  resetProfile(kind)
+  capDrafts.value = cloneCapDrafts()
+  capFeedbackIsError.value = false
+  capFeedback.value = `คืนค่าเริ่มต้นของ${dayKindLabels[kind]} แล้ว`
+}
 
 const showSalaryNotice = (message: string) => {
   salaryNotice.value = message
@@ -66,6 +193,10 @@ const resetEditors = () => {
   reminderTimeDraft.value = reminderTime.value
   reminderFeedback.value = ''
   reminderFeedbackIsError.value = false
+  capEnabledDraft.value = capEnabled.value
+  capDrafts.value = cloneCapDrafts()
+  capKindDraft.value = 'weekday'
+  clearCapFeedback()
 }
 
 watch(() => props.open, (open) => {
@@ -233,6 +364,139 @@ onBeforeUnmount(() => {
               </div>
               <button class="setting-button salary-save" type="submit" :disabled="busy">
                 บันทึกเงินเดือน
+              </button>
+            </form>
+
+            <form class="setting-card cap-card" @submit.prevent="submitDailyCap">
+              <div class="setting-icon setting-icon--cap" aria-hidden="true">◔</div>
+              <div class="setting-copy cap-copy">
+                <strong>งบรายจ่ายต่อวัน (CAP)</strong>
+                <p>ตั้งเพดานของแต่ละวัน แล้วหน้าจดรายการจะมีหลอดบอกว่าวันนี้เกินงบหรือยัง</p>
+
+                <label class="cap-toggle">
+                  <input v-model="capEnabledDraft" type="checkbox" :disabled="busy" @change="clearCapFeedback" />
+                  <span aria-hidden="true"></span>
+                  เปิดใช้งบรายวัน
+                </label>
+
+                <div v-if="capEnabledDraft" class="cap-editor">
+                  <div class="cap-kind-tabs" role="group" aria-label="เลือกประเภทวัน">
+                    <button
+                      v-for="kind in capKindOrder"
+                      :key="kind"
+                      type="button"
+                      :class="{ active: capKindDraft === kind }"
+                      :disabled="busy"
+                      @click="capKindDraft = kind; clearCapFeedback()"
+                    >
+                      {{ dayKindEmojis[kind] }} {{ dayKindLabels[kind] }}
+                    </button>
+                  </div>
+
+                  <label class="cap-field" :for="`daily-cap-${capKindDraft}`">
+                    <span>เพดานรายจ่ายต่อวัน</span>
+                    <span class="cap-input-wrap">
+                      <b aria-hidden="true">฿</b>
+                      <input
+                        :id="`daily-cap-${capKindDraft}`"
+                        v-model.number="activeCapDraft.cap"
+                        type="number"
+                        min="1"
+                        step="1"
+                        inputmode="decimal"
+                        :disabled="busy"
+                        @input="clearCapFeedback"
+                      />
+                      <em>บาท / วัน</em>
+                    </span>
+                  </label>
+
+                  <div class="cap-plan-editor">
+                    <div class="cap-plan-head">
+                      <span>แผนค่าใช้จ่ายในวัน</span>
+                      <button type="button" :disabled="busy" @click="usePlanTotalAsCap">
+                        ใช้ผลรวมเป็นเพดาน
+                      </button>
+                    </div>
+
+                    <div
+                      v-for="(item, index) in activeCapDraft.items"
+                      :key="item.id"
+                      class="cap-plan-row"
+                    >
+                      <input
+                        v-model="item.emoji"
+                        class="cap-plan-emoji"
+                        type="text"
+                        maxlength="2"
+                        :aria-label="`อีโมจิของรายการที่ ${index + 1}`"
+                        :disabled="busy"
+                        @input="clearCapFeedback"
+                      />
+                      <input
+                        v-model="item.label"
+                        class="cap-plan-label"
+                        type="text"
+                        maxlength="24"
+                        placeholder="ชื่อรายการ เช่น กลางวัน"
+                        :aria-label="`ชื่อรายการที่ ${index + 1}`"
+                        :disabled="busy"
+                        @input="clearCapFeedback"
+                      />
+                      <input
+                        v-model.number="item.amount"
+                        class="cap-plan-amount"
+                        type="number"
+                        min="0"
+                        step="1"
+                        inputmode="decimal"
+                        :aria-label="`จำนวนเงินของรายการที่ ${index + 1}`"
+                        :disabled="busy"
+                        @input="clearCapFeedback"
+                      />
+                      <button
+                        class="cap-plan-remove"
+                        type="button"
+                        :aria-label="`ลบรายการที่ ${index + 1}`"
+                        :disabled="busy"
+                        @click="removePlanItem(item.id)"
+                      >×</button>
+                    </div>
+
+                    <button
+                      class="cap-plan-add"
+                      type="button"
+                      :disabled="busy || activeCapDraft.items.length >= MAX_PLAN_ITEMS"
+                      @click="addPlanItem"
+                    >＋ เพิ่มรายการในแผน</button>
+
+                    <p class="cap-plan-summary">
+                      <span>รวมแผน <b>{{ formatBaht(activeCapPlanTotal) }}</b></span>
+                      <span :class="{ 'cap-plan-summary--over': activeCapSpare < 0 }">
+                        {{ activeCapSpare < 0 ? 'แผนเกินเพดาน' : 'กันเหลือ' }}
+                        <b>{{ formatBaht(Math.abs(activeCapSpare)) }}</b>
+                      </span>
+                    </p>
+                  </div>
+
+                  <button class="cap-restore" type="button" :disabled="busy" @click="restoreDefaultCap">
+                    คืนค่าเริ่มต้นของ{{ dayKindLabels[capKindDraft] }}
+                  </button>
+                </div>
+
+                <small
+                  v-if="capFeedback"
+                  class="cap-feedback"
+                  :class="{ 'cap-feedback--error': capFeedbackIsError }"
+                  :role="capFeedbackIsError ? 'alert' : 'status'"
+                >{{ capFeedback }}</small>
+                <small v-else>
+                  ค่าเริ่มต้น: วันทำงาน ฿320 (เช้า 65 · กลางวัน 70 · เย็น 70 · เดินทาง 77) ·
+                  เก็บเฉพาะในเบราว์เซอร์เครื่องนี้
+                </small>
+              </div>
+              <button class="setting-button cap-save" type="submit" :disabled="busy">
+                บันทึกงบรายวัน
               </button>
             </form>
 
@@ -564,6 +828,286 @@ onBeforeUnmount(() => {
   align-self: end;
 }
 
+.cap-card {
+  align-items: start;
+  margin-bottom: 12px;
+  border-color: #d5e2da;
+  background: linear-gradient(135deg, #fbfdfb, #f0f7f3);
+}
+
+.setting-icon--cap {
+  color: #1d6d49;
+  background: #dff2e7;
+  font-size: 1.25rem;
+}
+
+.cap-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.cap-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+  color: #4f675c;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.cap-toggle input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.cap-toggle > span {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  background: #cbd5cf;
+  transition: background 0.18s;
+}
+
+.cap-toggle > span::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(25, 77, 59, 0.28);
+  content: '';
+  transition: transform 0.18s;
+}
+
+.cap-toggle input:checked + span { background: #39775d; }
+.cap-toggle input:checked + span::after { transform: translateX(14px); }
+.cap-toggle input:focus-visible + span { outline: 3px solid rgba(41, 116, 79, 0.25); }
+
+.cap-editor {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.cap-kind-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 11px;
+  background: #e9f1eb;
+}
+
+.cap-kind-tabs button {
+  flex: 1 1 auto;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  color: #4c6559;
+  background: transparent;
+  font-family: 'Noto Sans Thai', sans-serif;
+  font-size: 0.63rem;
+  font-weight: 700;
+}
+
+.cap-kind-tabs button.active {
+  color: #194d3b;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(25, 77, 59, 0.12);
+}
+
+.cap-field {
+  display: grid;
+  gap: 5px;
+  color: #4f675c;
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.cap-input-wrap {
+  display: grid;
+  min-height: 42px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 1px solid #cfdcd4;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.cap-input-wrap:focus-within {
+  border-color: #5e987a;
+  box-shadow: 0 0 0 3px rgba(65, 139, 99, 0.12);
+}
+
+.cap-input-wrap b {
+  color: #2c7955;
+  font-family: 'Manrope', sans-serif;
+  font-size: 0.8rem;
+}
+
+.cap-input-wrap input {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 0;
+  border: 0;
+  outline: 0;
+  color: #1f352b;
+  background: transparent;
+  font-family: 'Manrope', sans-serif;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.cap-input-wrap em {
+  color: #819087;
+  font-size: 0.59rem;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.cap-plan-editor {
+  display: grid;
+  gap: 6px;
+  padding: 11px;
+  border: 1px dashed #cfdcd4;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.cap-plan-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #4f675c;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.cap-plan-head button {
+  padding: 5px 8px;
+  border: 1px solid #cfdad3;
+  border-radius: 8px;
+  color: #2b6b4d;
+  background: #fff;
+  font-family: 'Noto Sans Thai', sans-serif;
+  font-size: 0.58rem;
+  font-weight: 700;
+}
+
+.cap-plan-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 88px 30px;
+  align-items: center;
+  gap: 6px;
+}
+
+.cap-plan-row input {
+  min-height: 34px;
+  padding: 5px 8px;
+  border: 1px solid #d9e2dc;
+  border-radius: 8px;
+  color: #1f352b;
+  background: #fff;
+  font-family: 'Noto Sans Thai', sans-serif;
+  font-size: 0.66rem;
+}
+
+.cap-plan-row input:focus-visible {
+  border-color: #5e987a;
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(65, 139, 99, 0.12);
+}
+
+.cap-plan-emoji { text-align: center; }
+
+.cap-plan-amount {
+  font-family: 'Manrope', sans-serif !important;
+  font-weight: 700;
+  text-align: right;
+}
+
+.cap-plan-remove {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #e7d3d1;
+  border-radius: 8px;
+  color: #b4544c;
+  background: #fff;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.cap-plan-remove:hover:not(:disabled) { background: #fdf1ef; }
+
+.cap-plan-add {
+  justify-self: start;
+  margin-top: 2px;
+  padding: 6px 10px;
+  border: 1px dashed #b9cec3;
+  border-radius: 9px;
+  color: #2b6b4d;
+  background: transparent;
+  font-family: 'Noto Sans Thai', sans-serif;
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.cap-plan-add:disabled { color: #9aa8a1; border-color: #dce2de; }
+
+.cap-plan-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 5px 0 0 !important;
+  padding-top: 8px;
+  border-top: 1px solid #e9eeea;
+  color: #55625c !important;
+  font-size: 0.64rem !important;
+}
+
+.cap-plan-summary b {
+  color: var(--ink);
+  font-family: 'Manrope', sans-serif;
+  font-weight: 800;
+}
+
+.cap-plan-summary--over,
+.cap-plan-summary--over b { color: #b74740; }
+
+.cap-restore {
+  justify-self: start;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  color: #5a6d64;
+  background: transparent;
+  font-family: 'Noto Sans Thai', sans-serif;
+  font-size: 0.61rem;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.setting-copy .cap-feedback { color: #277451; }
+.setting-copy .cap-feedback--error { color: #b74740; }
+
+.cap-save { align-self: end; }
+
 .reminder-card {
   align-items: start;
   margin-bottom: 12px;
@@ -800,6 +1344,8 @@ onBeforeUnmount(() => {
   .settings-header, .settings-body { padding-inline: 18px; }
   .setting-card { grid-template-columns: 42px 1fr; }
   .setting-button { grid-column: 1 / -1; }
+  .cap-plan-row { grid-template-columns: 38px minmax(0, 1fr) 72px 28px; }
+  .cap-kind-tabs button { flex: 1 1 100%; }
   .reset-confirm { align-items: stretch; flex-direction: column; }
   .confirm-actions { justify-content: flex-end; }
 }
