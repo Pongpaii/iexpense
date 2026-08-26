@@ -456,9 +456,10 @@ onBeforeUnmount(() => {
                     </div>
 
                     <p class="cap-plan-note">
-                      แต่ละช่องมีหลอดของตัวเอง ระบบเรียงลำดับดังนี้: คำในชื่อรายการ → ช่วงเวลาที่กดบันทึก
-                      → หมวดหมู่ รายจ่ายหนึ่งรายการนับเข้าช่องเดียวเท่านั้น
-                      ช่วงเวลาข้ามเที่ยงคืนได้ (เช่น 15:00–04:59)
+                      ระบบดูหมวดหมู่ก่อน: ค่าอาหารเข้าช่องอาหาร ค่าเดินทางเข้าช่องเดินทาง
+                      ไม่ว่าจะจ่ายกี่โมง · คำในชื่อรายการกับช่วงเวลาใช้แยกช่องย่อยภายในหมวดเดียวกัน
+                      (เช่น อาหารเช้า/กลางวัน/เย็น) · หมวดที่ไม่มีช่องเฉพาะจะไปรวมที่ช่อง
+                      “หมวดอื่น ๆ” · รายจ่ายหนึ่งรายการนับช่องเดียว ช่วงเวลาข้ามเที่ยงคืนได้ (15:00–04:59)
                     </p>
 
                     <div
@@ -539,7 +540,7 @@ onBeforeUnmount(() => {
                           class="cap-plan-keywords"
                           type="text"
                           maxlength="160"
-                          placeholder="คำที่จับคู่ คั่นด้วย , เช่น เช้า, breakfast"
+                          placeholder="คำที่ใช้แยกช่องในหมวดเดียวกัน คั่นด้วย , เช่น เช้า, breakfast"
                           :aria-label="`คำที่ใช้จับคู่ของรายการที่ ${index + 1}`"
                           :disabled="busy"
                           @input="clearCapFeedback"
@@ -547,11 +548,11 @@ onBeforeUnmount(() => {
                         <select
                           v-model="item.category"
                           class="cap-plan-category"
-                          :aria-label="`หมวดหมู่สำรองของรายการที่ ${index + 1}`"
+                          :aria-label="`หมวดหมู่ของรายการที่ ${index + 1}`"
                           :disabled="busy"
                           @change="clearCapFeedback"
                         >
-                          <option :value="null">ไม่ใช้หมวดหมู่</option>
+                          <option :value="null">✨ หมวดอื่น ๆ (ช่องรวม)</option>
                           <option
                             v-for="option in transactionCategories"
                             :key="option.value"
@@ -589,8 +590,9 @@ onBeforeUnmount(() => {
                   :role="capFeedbackIsError ? 'alert' : 'status'"
                 >{{ capFeedback }}</small>
                 <small v-else>
-                  ค่าเริ่มต้น: วันทำงาน ฿320 · เช้า 05:00–11:59 (65) · กลางวัน 12:00–14:59 (70) ·
-                  เย็น 15:00–04:59 (70) · เดินทาง 77 (ใช้หมวดหมู่) · เก็บเฉพาะในเบราว์เซอร์เครื่องนี้
+                  ค่าเริ่มต้น: วันทำงาน ฿320 · อาหารเช้า 05:00–11:59 (65) · อาหารกลางวัน 12:00–14:59 (70) ·
+                  อาหารเย็น 15:00–04:59 (70) · เดินทาง 77 · หมวดอื่น ๆ 38 ·
+                  เก็บเฉพาะในเบราว์เซอร์เครื่องนี้
                 </small>
               </div>
               <button class="setting-button cap-save" type="submit" :disabled="busy">

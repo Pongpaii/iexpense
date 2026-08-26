@@ -183,7 +183,10 @@ const spareLevel = computed(() => {
         <small class="cap-slot__status">{{ itemStatus(row) }}</small>
       </li>
 
-      <li :class="`cap-slot cap-slot--${spareLevel} cap-slot--spare`">
+      <li
+        v-if="progress.unplannedCount > 0 || planSpare > 0"
+        :class="`cap-slot cap-slot--${spareLevel} cap-slot--spare`"
+      >
         <div class="cap-slot__top">
           <span class="cap-slot__name">
             🧺 นอกแผน
@@ -219,7 +222,7 @@ const spareLevel = computed(() => {
         </small>
 
         <small v-if="progress.unplannedWithoutTime" class="cap-slot__note">
-          {{ progress.unplannedWithoutTime }} รายการจดย้อนหลัง ไม่มีเวลาให้แยกมื้อ
+          {{ progress.unplannedWithoutTime }} รายการจดย้อนหลัง ไม่มีเวลาให้แยกช่องในหมวดเดียวกัน
           ใส่คำว่าเช้า/กลางวัน/เย็นในชื่อรายการได้
         </small>
       </li>

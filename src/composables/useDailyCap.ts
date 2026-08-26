@@ -15,11 +15,14 @@ export interface CapPlanItem {
   emoji: string
   label: string
   amount: number
-  /** คำที่ใช้จับคู่กับชื่อรายการ เพื่อรู้ว่ารายจ่ายนี้อยู่ในช่องไหนของแผน */
+  /** คำที่ใช้เลือกช่องภายในหมวดเดียวกัน เทียบกับชื่อรายการ */
   keywords: string[]
-  /** ช่วงเวลาที่ถือว่าเป็นช่องนี้ ดูจากเวลาที่กดบันทึก (created_at) */
+  /** ช่วงเวลาที่ถือว่าเป็นช่องนี้ ใช้เลือกช่องภายในหมวดเดียวกันเท่านั้น */
   timeWindow: CapTimeWindow | null
-  /** ถ้าตั้งไว้ รายจ่ายในหมวดนี้ที่ยังไม่เข้าช่องอื่นจะถูกนับเข้าช่องนี้ */
+  /**
+   * หมวดหมู่ที่ช่องนี้รับผิดชอบ เป็นตัวคัดกลุ่มก่อนคำและเวลา
+   * null = ช่องรวม รับหมวดที่ไม่มีช่องเฉพาะของตัวเอง
+   */
   category: TransactionCategory | null
 }
 
@@ -41,6 +44,9 @@ export const MAX_PLAN_ITEMS = 10
 
 const STORAGE_KEY = 'money-flow.daily-cap.v1'
 
+/** v1 จับคู่ด้วยเวลาก่อนหมวดหมู่ · v2 ใช้หมวดหมู่คัดกลุ่มก่อน */
+const CURRENT_VERSION = 2
+
 export const dayKindLabels: Record<DayKind, string> = {
   weekday: 'วันทำงาน (จ.-ศ.)',
   weekend: 'วันหยุด (ส.-อา.)',
@@ -54,7 +60,6 @@ export const dayKindEmojis: Record<DayKind, string> = {
 const breakfastKeywords = ['เช้า', 'breakfast']
 const lunchKeywords = ['กลางวัน', 'เที่ยง', 'lunch']
 const dinnerKeywords = ['เย็น', 'ค่ำ', 'dinner']
-const commuteKeywords = ['เดินทาง', 'รถ', 'วิน', 'แท็กซี่', 'น้ำมัน', 'ค่ารถ', 'bts', 'mrt']
 
 const breakfastWindow: CapTimeWindow = { start: '05:00', end: '11:59' }
 const lunchWindow: CapTimeWindow = { start: '12:00', end: '14:59' }
@@ -65,18 +70,20 @@ const createDefaultSettings = (): DailyCapSettings => ({
   weekday: {
     cap: 320,
     items: [
-      { id: 'weekday-breakfast', emoji: '🍜', label: 'เช้า', amount: 65, keywords: [...breakfastKeywords], timeWindow: { ...breakfastWindow }, category: null },
-      { id: 'weekday-lunch', emoji: '🍜', label: 'กลางวัน', amount: 70, keywords: [...lunchKeywords], timeWindow: { ...lunchWindow }, category: null },
-      { id: 'weekday-dinner', emoji: '🍜', label: 'เย็น', amount: 70, keywords: [...dinnerKeywords], timeWindow: { ...dinnerWindow }, category: null },
-      { id: 'weekday-commute', emoji: '🚗', label: 'เดินทาง', amount: 77, keywords: [...commuteKeywords], timeWindow: null, category: 'การเดินทาง' },
+      { id: 'weekday-breakfast', emoji: '🍜', label: 'เช้า', amount: 65, keywords: [...breakfastKeywords], timeWindow: { ...breakfastWindow }, category: 'อาหาร' },
+      { id: 'weekday-lunch', emoji: '🍜', label: 'กลางวัน', amount: 70, keywords: [...lunchKeywords], timeWindow: { ...lunchWindow }, category: 'อาหาร' },
+      { id: 'weekday-dinner', emoji: '🍜', label: 'เย็น', amount: 70, keywords: [...dinnerKeywords], timeWindow: { ...dinnerWindow }, category: 'อาหาร' },
+      { id: 'weekday-commute', emoji: '🚗', label: 'เดินทาง', amount: 77, keywords: [], timeWindow: null, category: 'การเดินทาง' },
+      { id: 'weekday-other', emoji: '✨', label: 'อื่น ๆ', amount: 38, keywords: [], timeWindow: null, category: null },
     ],
   },
   weekend: {
     cap: 243,
     items: [
-      { id: 'weekend-breakfast', emoji: '🍜', label: 'เช้า', amount: 65, keywords: [...breakfastKeywords], timeWindow: { ...breakfastWindow }, category: null },
-      { id: 'weekend-lunch', emoji: '🍜', label: 'กลางวัน', amount: 70, keywords: [...lunchKeywords], timeWindow: { ...lunchWindow }, category: null },
-      { id: 'weekend-dinner', emoji: '🍜', label: 'เย็น', amount: 70, keywords: [...dinnerKeywords], timeWindow: { ...dinnerWindow }, category: null },
+      { id: 'weekend-breakfast', emoji: '🍜', label: 'เช้า', amount: 65, keywords: [...breakfastKeywords], timeWindow: { ...breakfastWindow }, category: 'อาหาร' },
+      { id: 'weekend-lunch', emoji: '🍜', label: 'กลางวัน', amount: 70, keywords: [...lunchKeywords], timeWindow: { ...lunchWindow }, category: 'อาหาร' },
+      { id: 'weekend-dinner', emoji: '🍜', label: 'เย็น', amount: 70, keywords: [...dinnerKeywords], timeWindow: { ...dinnerWindow }, category: 'อาหาร' },
+      { id: 'weekend-other', emoji: '✨', label: 'อื่น ๆ', amount: 38, keywords: [], timeWindow: null, category: null },
     ],
   },
 })
@@ -219,13 +226,51 @@ const normalizeSettings = (value: unknown): DailyCapSettings => {
   }
 }
 
+/**
+ * ค่าที่บันทึกจาก v1 ยังไม่ผูกหมวดหมู่กับช่องมื้ออาหาร (เก็บเป็น null)
+ * ถ้าปล่อยไว้ ช่องเหล่านั้นจะกลายเป็นช่องรวมและดูดรายจ่ายหมวดอื่นเข้ามา
+ * จึงเติมหมวดหมู่จากค่าเริ่มต้นของช่องเดิมให้ก่อนใช้งาน
+ */
+const migrateStoredPayload = (value: unknown): unknown => {
+  if (typeof value !== 'object' || value === null) return value
+  const raw = value as Record<string, unknown>
+  if (Number(raw.version) >= CURRENT_VERSION) return raw
+
+  const migrateProfile = (profileValue: unknown) => {
+    if (typeof profileValue !== 'object' || profileValue === null) return profileValue
+    const profile = profileValue as Record<string, unknown>
+    if (!Array.isArray(profile.items)) return profile
+
+    return {
+      ...profile,
+      items: profile.items.map((itemValue) => {
+        if (typeof itemValue !== 'object' || itemValue === null) return itemValue
+        const item = itemValue as Record<string, unknown>
+        if (item.category) return item
+
+        const preset = typeof item.id === 'string' ? defaultItemById.get(item.id) : undefined
+        return preset ? { ...item, category: preset.category } : item
+      }),
+    }
+  }
+
+  return {
+    ...raw,
+    version: CURRENT_VERSION,
+    weekday: migrateProfile(raw.weekday),
+    weekend: migrateProfile(raw.weekend),
+  }
+}
+
+const parseStored = (stored: string) => normalizeSettings(migrateStoredPayload(JSON.parse(stored) as unknown))
+
 const loadSettings = (): DailyCapSettings => {
   if (typeof window === 'undefined') return createDefaultSettings()
 
   try {
     const stored = window.localStorage.getItem(STORAGE_KEY)
     if (!stored) return createDefaultSettings()
-    return normalizeSettings(JSON.parse(stored) as unknown)
+    return parseStored(stored)
   } catch {
     return createDefaultSettings()
   }
@@ -242,7 +287,10 @@ export interface CapSaveResult {
 
 const persist = (): boolean => {
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings.value))
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ version: CURRENT_VERSION, ...settings.value }),
+    )
     return true
   } catch {
     return false
@@ -318,11 +366,47 @@ export const recordedMinutesOfDay = (transaction: MatchableTransaction): number 
   return created.getHours() * 60 + created.getMinutes()
 }
 
+const matchByKeyword = (items: readonly CapPlanItem[], description: string) =>
+  items.find((item) =>
+    item.keywords.some((keyword) => keyword && description.includes(keyword.toLowerCase())),
+  ) ?? null
+
+const matchByTime = (items: readonly CapPlanItem[], minutesOfDay: number | null) =>
+  minutesOfDay === null
+    ? null
+    : items.find((item) => item.timeWindow && isWithinTimeWindow(item.timeWindow, minutesOfDay)) ??
+      null
+
 /**
- * หาช่องในแผนที่รายจ่ายนี้ควรถูกนับ ตามลำดับความน่าเชื่อถือ
- * 1. คีย์เวิร์ดในชื่อรายการ (ผู้ใช้ระบุเองชัดที่สุด)
+ * เลือกช่องภายในกลุ่มที่หมวดหมู่ตรงกันแล้ว
+ * 1. คำในชื่อรายการ (ผู้ใช้เขียนเองชัดที่สุด เช่น "ข้าวเย็น")
  * 2. ช่วงเวลาที่กดบันทึก
- * 3. หมวดหมู่
+ * 3. ช่องที่ไม่ผูกเวลา (รับทุกเวลาของหมวดนั้น)
+ * 4. ถ้าหมวดนั้นมีช่องเดียว ก็เข้าช่องนั้น
+ */
+const pickWithinGroup = (
+  group: readonly CapPlanItem[],
+  description: string,
+  minutesOfDay: number | null,
+): CapPlanItem | null => {
+  if (!group.length) return null
+
+  return (
+    matchByKeyword(group, description) ??
+    matchByTime(group, minutesOfDay) ??
+    group.find((item) => item.timeWindow === null) ??
+    (group.length === 1 ? group[0] : null)
+  )
+}
+
+/**
+ * หาช่องในแผนที่รายจ่ายนี้ควรถูกนับ โดยยึด "หมวดหมู่" เป็นหลัก
+ *
+ * - หมวดหมู่คัดกลุ่มก่อน: ค่าอาหารเข้าช่องอาหาร ค่าเดินทางเข้าช่องเดินทาง
+ *   ไม่ว่าจะจ่ายกี่โมงก็ตาม
+ * - เวลากับคำในชื่อรายการใช้เลือกช่องย่อย "ภายในหมวดเดียวกัน" เท่านั้น
+ *   เช่น อาหารมีช่องเช้า/กลางวัน/เย็น
+ * - หมวดที่ไม่มีช่องเฉพาะจะไปรวมที่ช่องรวม (ช่องที่ไม่ผูกหมวดหมู่)
  *
  * รายจ่ายหนึ่งรายการนับได้ช่องเดียว ผลรวมจึงไม่ซ้อนกัน
  */
@@ -331,20 +415,23 @@ export const matchPlanItem = (
   transaction: MatchableTransaction,
 ): CapPlanItem | null => {
   const description = (transaction.description ?? '').toLowerCase()
-
-  const byKeyword = items.find((item) =>
-    item.keywords.some((keyword) => keyword && description.includes(keyword.toLowerCase())),
-  )
-  if (byKeyword) return byKeyword
-
   const minutes = recordedMinutesOfDay(transaction)
-  if (minutes !== null) {
-    const byTime = items.find((item) => item.timeWindow && isWithinTimeWindow(item.timeWindow, minutes))
-    if (byTime) return byTime
+  const category = transaction.category ?? null
+  const catchAll = items.filter((item) => item.category === null)
+
+  // ไม่ได้เลือกหมวดหมู่ไว้ ใช้ได้แค่คำกับเวลา ถ้ายังไม่รู้ก็ลงช่องรวม
+  if (category === null) {
+    return (
+      matchByKeyword(items, description) ??
+      matchByTime(items, minutes) ??
+      pickWithinGroup(catchAll, description, minutes)
+    )
   }
 
-  if (!transaction.category) return null
-  return items.find((item) => item.category !== null && item.category === transaction.category) ?? null
+  const sameCategory = items.filter((item) => item.category === category)
+  return sameCategory.length
+    ? pickWithinGroup(sameCategory, description, minutes)
+    : pickWithinGroup(catchAll, description, minutes)
 }
 
 /** ช่องในแผนที่ตรงกับเวลาปัจจุบัน ใช้ทำเครื่องหมาย "ตอนนี้" */
@@ -455,7 +542,7 @@ if (typeof window !== 'undefined') {
     }
 
     try {
-      settings.value = normalizeSettings(JSON.parse(event.newValue) as unknown)
+      settings.value = parseStored(event.newValue)
     } catch {
       /* ค่าที่อ่านไม่ได้ ให้คงค่าปัจจุบันไว้ */
     }
