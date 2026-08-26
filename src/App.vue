@@ -732,7 +732,7 @@ onBeforeUnmount(() => {
             <DailyCapBar
               class="record-cap"
               :date="selectedRecordDate"
-              :spent="recordExpense"
+              :transactions="recordTransactions"
               :is-today="isRecordToday"
               @edit="settingsOpen = true"
             />

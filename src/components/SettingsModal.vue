@@ -6,12 +6,15 @@ import {
   createPlanItemId,
   dayKindEmojis,
   dayKindLabels,
+  formatKeywords,
   MAX_PLAN_ITEMS,
+  parseKeywords,
   sumPlanItems,
   useDailyCap,
   type CapPlanItem,
   type DayKind,
 } from '../composables/useDailyCap'
+import { transactionCategories } from '../types/transaction'
 import { formatBaht } from '../utils/format'
 
 const props = withDefaults(
@@ -46,8 +49,8 @@ const {
   updateDailyReminder,
 } = useDailyReminder()
 const {
-  capSettings,
   capEnabled,
+  cloneProfile,
   saveProfile,
   setCapEnabled,
   resetProfile,
@@ -62,9 +65,20 @@ const reminderFeedback = ref('')
 const reminderFeedbackIsError = ref(false)
 let salaryNoticeTimer: ReturnType<typeof window.setTimeout> | undefined
 
+/**
+ * เก็บคีย์เวิร์ดเป็นข้อความดิบระหว่างพิมพ์ แล้วค่อยแปลงเป็น array ตอนบันทึก
+ * ช่วงเวลาแยกเป็น 3 ฟิลด์เพื่อผูกกับ input type="time" ได้ตรง ๆ
+ */
+type CapPlanItemDraft = CapPlanItem & {
+  keywordText: string
+  timeEnabled: boolean
+  timeStart: string
+  timeEnd: string
+}
+
 interface CapProfileDraft {
   cap: number | string
-  items: CapPlanItem[]
+  items: CapPlanItemDraft[]
 }
 
 const capKindOrder: DayKind[] = ['weekday', 'weekend']
@@ -77,15 +91,23 @@ const capDrafts = ref<Record<DayKind, CapProfileDraft>>({
 const capFeedback = ref('')
 const capFeedbackIsError = ref(false)
 
+const cloneCapProfileDraft = (kind: DayKind): CapProfileDraft => {
+  const profile = cloneProfile(kind)
+  return {
+    cap: profile.cap,
+    items: profile.items.map((item) => ({
+      ...item,
+      keywordText: formatKeywords(item.keywords),
+      timeEnabled: item.timeWindow !== null,
+      timeStart: item.timeWindow?.start ?? '05:00',
+      timeEnd: item.timeWindow?.end ?? '11:59',
+    })),
+  }
+}
+
 const cloneCapDrafts = (): Record<DayKind, CapProfileDraft> => ({
-  weekday: {
-    cap: capSettings.value.weekday.cap,
-    items: capSettings.value.weekday.items.map((item) => ({ ...item })),
-  },
-  weekend: {
-    cap: capSettings.value.weekend.cap,
-    items: capSettings.value.weekend.items.map((item) => ({ ...item })),
-  },
+  weekday: cloneCapProfileDraft('weekday'),
+  weekend: cloneCapProfileDraft('weekend'),
 })
 
 capDrafts.value = cloneCapDrafts()
@@ -114,6 +136,13 @@ const addPlanItem = () => {
     emoji: '💸',
     label: '',
     amount: 0,
+    keywords: [],
+    keywordText: '',
+    timeWindow: null,
+    timeEnabled: false,
+    timeStart: '05:00',
+    timeEnd: '11:59',
+    category: null,
   })
 }
 
@@ -142,14 +171,21 @@ const submitDailyCap = () => {
     const draft = capDrafts.value[kind]
     const result = saveProfile(kind, {
       cap: Number(draft.cap),
-      items: draft.items.map((item) => ({ ...item, amount: Number(item.amount) })),
+      items: draft.items.map((item) => ({
+        ...item,
+        amount: Number(item.amount),
+        keywords: parseKeywords(item.keywordText),
+        timeWindow: item.timeEnabled ? { start: item.timeStart, end: item.timeEnd } : null,
+      })),
     })
 
     if (!result.ok) {
       capFeedbackIsError.value = true
       capFeedback.value = result.reason === 'invalid-cap'
         ? `เพดานงบของ${dayKindLabels[kind]} ต้องมากกว่า 0 บาท`
-        : `จำนวนเงินในแผนของ${dayKindLabels[kind]} ไม่ถูกต้อง`
+        : result.reason === 'invalid-time'
+          ? `ช่วงเวลาในแผนของ${dayKindLabels[kind]} ไม่ถูกต้อง`
+          : `จำนวนเงินในแผนของ${dayKindLabels[kind]} ไม่ถูกต้อง`
       capKindDraft.value = kind
       return
     }
@@ -419,48 +455,110 @@ onBeforeUnmount(() => {
                       </button>
                     </div>
 
+                    <p class="cap-plan-note">
+                      แต่ละช่องมีหลอดของตัวเอง ระบบเรียงลำดับดังนี้: คำในชื่อรายการ → ช่วงเวลาที่กดบันทึก
+                      → หมวดหมู่ รายจ่ายหนึ่งรายการนับเข้าช่องเดียวเท่านั้น
+                      ช่วงเวลาข้ามเที่ยงคืนได้ (เช่น 15:00–04:59)
+                    </p>
+
                     <div
                       v-for="(item, index) in activeCapDraft.items"
                       :key="item.id"
-                      class="cap-plan-row"
+                      class="cap-plan-item"
                     >
-                      <input
-                        v-model="item.emoji"
-                        class="cap-plan-emoji"
-                        type="text"
-                        maxlength="2"
-                        :aria-label="`อีโมจิของรายการที่ ${index + 1}`"
-                        :disabled="busy"
-                        @input="clearCapFeedback"
-                      />
-                      <input
-                        v-model="item.label"
-                        class="cap-plan-label"
-                        type="text"
-                        maxlength="24"
-                        placeholder="ชื่อรายการ เช่น กลางวัน"
-                        :aria-label="`ชื่อรายการที่ ${index + 1}`"
-                        :disabled="busy"
-                        @input="clearCapFeedback"
-                      />
-                      <input
-                        v-model.number="item.amount"
-                        class="cap-plan-amount"
-                        type="number"
-                        min="0"
-                        step="1"
-                        inputmode="decimal"
-                        :aria-label="`จำนวนเงินของรายการที่ ${index + 1}`"
-                        :disabled="busy"
-                        @input="clearCapFeedback"
-                      />
-                      <button
-                        class="cap-plan-remove"
-                        type="button"
-                        :aria-label="`ลบรายการที่ ${index + 1}`"
-                        :disabled="busy"
-                        @click="removePlanItem(item.id)"
-                      >×</button>
+                      <div class="cap-plan-row">
+                        <input
+                          v-model="item.emoji"
+                          class="cap-plan-emoji"
+                          type="text"
+                          maxlength="2"
+                          :aria-label="`อีโมจิของรายการที่ ${index + 1}`"
+                          :disabled="busy"
+                          @input="clearCapFeedback"
+                        />
+                        <input
+                          v-model="item.label"
+                          class="cap-plan-label"
+                          type="text"
+                          maxlength="24"
+                          placeholder="ชื่อรายการ เช่น กลางวัน"
+                          :aria-label="`ชื่อรายการที่ ${index + 1}`"
+                          :disabled="busy"
+                          @input="clearCapFeedback"
+                        />
+                        <input
+                          v-model.number="item.amount"
+                          class="cap-plan-amount"
+                          type="number"
+                          min="0"
+                          step="1"
+                          inputmode="decimal"
+                          :aria-label="`จำนวนเงินของรายการที่ ${index + 1}`"
+                          :disabled="busy"
+                          @input="clearCapFeedback"
+                        />
+                        <button
+                          class="cap-plan-remove"
+                          type="button"
+                          :aria-label="`ลบรายการที่ ${index + 1}`"
+                          :disabled="busy"
+                          @click="removePlanItem(item.id)"
+                        >×</button>
+                      </div>
+
+                      <div class="cap-plan-time">
+                        <label class="cap-time-toggle">
+                          <input
+                            v-model="item.timeEnabled"
+                            type="checkbox"
+                            :disabled="busy"
+                            @change="clearCapFeedback"
+                          />
+                          ใช้ช่วงเวลา
+                        </label>
+                        <input
+                          v-model="item.timeStart"
+                          type="time"
+                          :disabled="busy || !item.timeEnabled"
+                          :aria-label="`เวลาเริ่มของรายการที่ ${index + 1}`"
+                          @input="clearCapFeedback"
+                        />
+                        <span aria-hidden="true">–</span>
+                        <input
+                          v-model="item.timeEnd"
+                          type="time"
+                          :disabled="busy || !item.timeEnabled"
+                          :aria-label="`เวลาสิ้นสุดของรายการที่ ${index + 1}`"
+                          @input="clearCapFeedback"
+                        />
+                      </div>
+
+                      <div class="cap-plan-match">
+                        <input
+                          v-model="item.keywordText"
+                          class="cap-plan-keywords"
+                          type="text"
+                          maxlength="160"
+                          placeholder="คำที่จับคู่ คั่นด้วย , เช่น เช้า, breakfast"
+                          :aria-label="`คำที่ใช้จับคู่ของรายการที่ ${index + 1}`"
+                          :disabled="busy"
+                          @input="clearCapFeedback"
+                        />
+                        <select
+                          v-model="item.category"
+                          class="cap-plan-category"
+                          :aria-label="`หมวดหมู่สำรองของรายการที่ ${index + 1}`"
+                          :disabled="busy"
+                          @change="clearCapFeedback"
+                        >
+                          <option :value="null">ไม่ใช้หมวดหมู่</option>
+                          <option
+                            v-for="option in transactionCategories"
+                            :key="option.value"
+                            :value="option.value"
+                          >{{ option.emoji }} {{ option.value }}</option>
+                        </select>
+                      </div>
                     </div>
 
                     <button
@@ -491,8 +589,8 @@ onBeforeUnmount(() => {
                   :role="capFeedbackIsError ? 'alert' : 'status'"
                 >{{ capFeedback }}</small>
                 <small v-else>
-                  ค่าเริ่มต้น: วันทำงาน ฿320 (เช้า 65 · กลางวัน 70 · เย็น 70 · เดินทาง 77) ·
-                  เก็บเฉพาะในเบราว์เซอร์เครื่องนี้
+                  ค่าเริ่มต้น: วันทำงาน ฿320 · เช้า 05:00–11:59 (65) · กลางวัน 12:00–14:59 (70) ·
+                  เย็น 15:00–04:59 (70) · เดินทาง 77 (ใช้หมวดหมู่) · เก็บเฉพาะในเบราว์เซอร์เครื่องนี้
                 </small>
               </div>
               <button class="setting-button cap-save" type="submit" :disabled="busy">
@@ -1005,11 +1103,89 @@ onBeforeUnmount(() => {
   font-weight: 700;
 }
 
+.cap-plan-note {
+  margin: 0 !important;
+  color: #7d8782 !important;
+  font-size: 0.58rem !important;
+  line-height: 1.5;
+}
+
+.cap-plan-item {
+  display: grid;
+  gap: 5px;
+  padding: 8px;
+  border: 1px solid #e6ece8;
+  border-radius: 10px;
+  background: #fff;
+}
+
 .cap-plan-row {
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr) 88px 30px;
   align-items: center;
   gap: 6px;
+}
+
+.cap-plan-match {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px;
+  align-items: center;
+  gap: 6px;
+}
+
+.cap-plan-time {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.cap-time-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #4f675c;
+  font-size: 0.58rem;
+  font-weight: 700;
+}
+
+.cap-time-toggle input { width: 13px; height: 13px; accent-color: #39775d; }
+
+.cap-plan-time > span { color: #a5b0aa; font-size: 0.6rem; }
+
+.cap-plan-time input[type='time'] {
+  min-height: 30px;
+  padding: 3px 6px;
+  border: 1px solid #d9e2dc;
+  border-radius: 8px;
+  color: #1f352b;
+  background: #fff;
+  font-family: 'Manrope', sans-serif;
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.cap-plan-time input[type='time']:disabled { color: #a8b2ad; background: #f4f6f4; }
+
+.cap-plan-match input,
+.cap-plan-match select {
+  min-height: 32px;
+  min-width: 0;
+  padding: 4px 7px;
+  border: 1px dashed #d9e2dc;
+  border-radius: 8px;
+  color: #405048;
+  background: #fbfdfb;
+  font-family: 'Noto Sans Thai', sans-serif;
+  font-size: 0.6rem;
+}
+
+.cap-plan-match input:focus-visible,
+.cap-plan-match select:focus-visible {
+  border-color: #5e987a;
+  border-style: solid;
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(65, 139, 99, 0.12);
 }
 
 .cap-plan-row input {
@@ -1345,6 +1521,7 @@ onBeforeUnmount(() => {
   .setting-card { grid-template-columns: 42px 1fr; }
   .setting-button { grid-column: 1 / -1; }
   .cap-plan-row { grid-template-columns: 38px minmax(0, 1fr) 72px 28px; }
+  .cap-plan-match { grid-template-columns: minmax(0, 1fr); }
   .cap-kind-tabs button { flex: 1 1 100%; }
   .reset-confirm { align-items: stretch; flex-direction: column; }
   .confirm-actions { justify-content: flex-end; }

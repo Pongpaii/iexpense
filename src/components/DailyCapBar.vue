@@ -1,14 +1,23 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { dayKindEmojis, dayKindLabels, sumPlanItems, useDailyCap } from '../composables/useDailyCap'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import {
+  activePlanItemAt,
+  buildPlanProgress,
+  dayKindEmojis,
+  dayKindLabels,
+  formatTimeWindow,
+  sumPlanItems,
+  useDailyCap,
+} from '../composables/useDailyCap'
+import type { Transaction } from '../types/transaction'
 import { formatBaht } from '../utils/format'
 
 const props = withDefaults(
   defineProps<{
     /** วันที่ในรูปแบบ YYYY-MM-DD ที่กำลังดูอยู่ */
     date: string
-    /** รายจ่ายรวมของวันนั้น */
-    spent: number
+    /** รายการทั้งหมดของวันนั้น (ระบบจะคัดเฉพาะรายจ่ายเอง) */
+    transactions: Transaction[]
     isToday?: boolean
   }>(),
   { isToday: true },
@@ -16,20 +25,46 @@ const props = withDefaults(
 
 const emit = defineEmits<{ edit: [] }>()
 
-const { capSettings, capEnabled, dayKindForDate } = useDailyCap()
+const { capEnabled, profileForKind, dayKindForDate } = useDailyCap()
 
 const dayKind = computed(() => dayKindForDate(props.date))
-const profile = computed(() => capSettings.value[dayKind.value])
+const profile = computed(() => profileForKind(dayKind.value))
 const cap = computed(() => profile.value.cap)
 const planTotal = computed(() => sumPlanItems(profile.value.items))
-const planLeftover = computed(() => Math.round((cap.value - planTotal.value) * 100) / 100)
+const planSpare = computed(() => Math.round((cap.value - planTotal.value) * 100) / 100)
 
-const spent = computed(() => Math.max(0, Math.round(Number(props.spent || 0) * 100) / 100))
+const expenses = computed(() => props.transactions.filter(({ type }) => type === 'expense'))
+const spent = computed(
+  () => Math.round(expenses.value.reduce((sum, item) => sum + (Number(item.amount) || 0), 0) * 100) / 100,
+)
+
+const progress = computed(() => buildPlanProgress(profile.value.items, expenses.value))
+
+/** เดินนาฬิกาไว้เพื่อขยับเครื่องหมาย "ตอนนี้" ให้ตรงช่วงเวลาปัจจุบัน */
+const now = ref(new Date())
+let clockTimer: ReturnType<typeof window.setInterval> | undefined
+
+onMounted(() => {
+  clockTimer = window.setInterval(() => {
+    now.value = new Date()
+  }, 30_000)
+})
+
+onBeforeUnmount(() => {
+  if (clockTimer !== undefined) window.clearInterval(clockTimer)
+})
+
+const activeSlotId = computed(() =>
+  props.isToday ? activePlanItemAt(profile.value.items, now.value)?.id ?? null : null,
+)
+
 const remaining = computed(() => Math.round((cap.value - spent.value) * 100) / 100)
 const overBy = computed(() => Math.max(0, -remaining.value))
 const ratio = computed(() => (cap.value > 0 ? spent.value / cap.value : 0))
 const percent = computed(() => Math.round(ratio.value * 100))
-const fillWidth = computed(() => `${Math.min(100, Math.max(spent.value > 0 ? 2 : 0, ratio.value * 100))}%`)
+
+const barWidth = (value: number) => `${Math.min(100, Math.max(value > 0 ? 3 : 0, value * 100))}%`
+const fillWidth = computed(() => barWidth(ratio.value))
 
 const level = computed(() => {
   if (ratio.value > 1) return 'over'
@@ -49,10 +84,32 @@ const hint = computed(() => {
   const dayWord = props.isToday ? 'วันนี้' : 'วันนั้น'
   if (level.value === 'over') return `${dayWord}ใช้เกินเพดานที่ตั้งไว้ พรุ่งนี้ลดลงหน่อยจะช่วยดึงกลับได้`
   if (level.value === 'full') return `${dayWord}ใช้เต็มงบพอดี จ่ายเพิ่มอีกจะเกินแล้ว`
-  if (level.value === 'warn') return `ใกล้ชนเพดานแล้ว เหลือให้ใช้อีกไม่มาก`
+  if (level.value === 'warn') return 'ใกล้ชนเพดานแล้ว เหลือให้ใช้อีกไม่มาก'
   if (level.value === 'watch') return `ใช้ไปแล้วเกินครึ่งของงบ${dayWord}`
   if (spent.value === 0) return `${dayWord}ยังไม่มีรายจ่าย งบเต็มจำนวน`
-  return `ยังอยู่ในงบสบาย ๆ`
+  return 'ยังอยู่ในงบสบาย ๆ'
+})
+
+/** สถานะสั้น ๆ ต่อท้ายหลอดย่อยของแต่ละช่องในแผน */
+const itemStatus = (row: (typeof progress.value.items)[number]) => {
+  if (row.level === 'empty') return 'ยังไม่ใช้'
+  if (row.level === 'over') return `เกิน ${formatBaht(Math.abs(row.remaining))}`
+  if (row.level === 'full') return 'ครบพอดี'
+  return `เหลือ ${formatBaht(row.remaining)}`
+}
+
+const spareRatio = computed(() => {
+  if (planSpare.value <= 0) return progress.value.unplanned > 0 ? Infinity : 0
+  return progress.value.unplanned / planSpare.value
+})
+
+const spareLevel = computed(() => {
+  if (progress.value.unplanned <= 0) return 'empty'
+  if (planSpare.value <= 0 || spareRatio.value > 1) return 'over'
+  if (spareRatio.value >= 1) return 'full'
+  if (spareRatio.value >= 0.8) return 'warn'
+  if (spareRatio.value >= 0.5) return 'watch'
+  return 'safe'
 })
 </script>
 
@@ -76,7 +133,7 @@ const hint = computed(() => {
     </header>
 
     <div
-      class="cap-track"
+      class="cap-track cap-track--main"
       role="progressbar"
       :aria-valuenow="Math.min(percent, 999)"
       aria-valuemin="0"
@@ -92,18 +149,84 @@ const hint = computed(() => {
     </p>
     <small class="cap-hint">{{ hint }}</small>
 
-    <ul v-if="profile.items.length" class="cap-plan" aria-label="แผนค่าใช้จ่ายของวัน">
-      <li v-for="item in profile.items" :key="item.id">
-        <span>{{ item.emoji }} {{ item.label }}</span>
-        <b>{{ formatBaht(item.amount) }}</b>
+    <ul v-if="progress.items.length" class="cap-plan" aria-label="ความคืบหน้าของแต่ละช่องในแผน">
+      <li
+        v-for="row in progress.items"
+        :key="row.item.id"
+        class="cap-slot"
+        :class="[`cap-slot--${row.level}`, { 'cap-slot--active': row.item.id === activeSlotId }]"
+      >
+        <div class="cap-slot__top">
+          <span class="cap-slot__name">
+            {{ row.item.emoji }} {{ row.item.label }}
+            <u v-if="row.item.timeWindow">{{ formatTimeWindow(row.item.timeWindow) }}</u>
+            <i v-if="row.count > 1" :title="`${row.count} รายการ`">×{{ row.count }}</i>
+            <mark v-if="row.item.id === activeSlotId">ตอนนี้</mark>
+          </span>
+          <span class="cap-slot__amount">
+            <b>{{ formatBaht(row.spent) }}</b>
+            <em>/ {{ formatBaht(row.item.amount) }}</em>
+          </span>
+        </div>
+
+        <div
+          class="cap-track cap-track--slot"
+          role="progressbar"
+          :aria-valuenow="Math.min(row.percent, 999)"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-label="`${row.item.label} ใช้ไป ${row.percent}% ของ ${formatBaht(row.item.amount)}`"
+        >
+          <span class="cap-fill" :style="{ width: barWidth(row.ratio) }"></span>
+        </div>
+
+        <small class="cap-slot__status">{{ itemStatus(row) }}</small>
       </li>
+
+      <li :class="`cap-slot cap-slot--${spareLevel} cap-slot--spare`">
+        <div class="cap-slot__top">
+          <span class="cap-slot__name">
+            🧺 นอกแผน
+            <i v-if="progress.unplannedCount" :title="`${progress.unplannedCount} รายการ`">
+              ×{{ progress.unplannedCount }}
+            </i>
+          </span>
+          <span class="cap-slot__amount">
+            <b>{{ formatBaht(progress.unplanned) }}</b>
+            <em>/ {{ formatBaht(Math.max(0, planSpare)) }}</em>
+          </span>
+        </div>
+
+        <div
+          class="cap-track cap-track--slot"
+          role="progressbar"
+          :aria-valuenow="Math.min(Number.isFinite(spareRatio) ? Math.round(spareRatio * 100) : 999, 999)"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-label="`รายจ่ายนอกแผน ${formatBaht(progress.unplanned)} จากงบกันเหลือ ${formatBaht(Math.max(0, planSpare))}`"
+        >
+          <span class="cap-fill" :style="{ width: barWidth(spareRatio) }"></span>
+        </div>
+
+        <small class="cap-slot__status">
+          {{
+            planSpare < 0
+              ? 'แผนเกินเพดานอยู่แล้ว ไม่มีงบกันเหลือ'
+              : progress.unplanned > planSpare
+                ? `เกินงบกันเหลือ ${formatBaht(progress.unplanned - planSpare)}`
+                : `งบกันเหลือ ${formatBaht(planSpare - progress.unplanned)}`
+          }}
+        </small>
+
+        <small v-if="progress.unplannedWithoutTime" class="cap-slot__note">
+          {{ progress.unplannedWithoutTime }} รายการจดย้อนหลัง ไม่มีเวลาให้แยกมื้อ
+          ใส่คำว่าเช้า/กลางวัน/เย็นในชื่อรายการได้
+        </small>
+      </li>
+
       <li class="cap-plan__total">
-        <span>รวม</span>
+        <span>รวมแผน</span>
         <b>{{ formatBaht(planTotal) }}</b>
-      </li>
-      <li class="cap-plan__spare" :class="{ 'cap-plan__spare--negative': planLeftover < 0 }">
-        <span>{{ planLeftover < 0 ? 'แผนเกินงบ' : 'กันเหลือ' }}</span>
-        <b>{{ formatBaht(Math.abs(planLeftover)) }}</b>
       </li>
     </ul>
   </section>
@@ -208,12 +331,17 @@ const hint = computed(() => {
 
 .cap-track {
   position: relative;
-  height: 12px;
   overflow: hidden;
   border-radius: 999px;
   background: #edf1ec;
+}
+
+.cap-track--main {
+  height: 12px;
   box-shadow: inset 0 1px 3px rgba(23, 45, 36, 0.09);
 }
+
+.cap-track--slot { height: 6px; }
 
 .cap-fill {
   display: block;
@@ -223,16 +351,12 @@ const hint = computed(() => {
   transition: width 0.4s cubic-bezier(0.22, 0.68, 0.35, 1), background 0.3s;
 }
 
-.cap-card--watch .cap-fill { background: linear-gradient(90deg, #7fbe63, var(--lime)); }
-.cap-card--warn .cap-fill { background: linear-gradient(90deg, #e0a83d, #f0cf6c); }
-.cap-card--full .cap-fill { background: linear-gradient(90deg, #d1863c, #e6a94f); }
+.cap-card--watch .cap-track--main .cap-fill { background: linear-gradient(90deg, #7fbe63, var(--lime)); }
+.cap-card--warn .cap-track--main .cap-fill { background: linear-gradient(90deg, #e0a83d, #f0cf6c); }
+.cap-card--full .cap-track--main .cap-fill { background: linear-gradient(90deg, #d1863c, #e6a94f); }
 
-.cap-card--over .cap-fill {
-  background: repeating-linear-gradient(
-    -45deg,
-    var(--red) 0 9px,
-    #d96a60 9px 18px
-  );
+.cap-card--over .cap-track--main .cap-fill {
+  background: repeating-linear-gradient(-45deg, var(--red) 0 9px, #d96a60 9px 18px);
   animation: cap-pulse 1.5s ease-in-out infinite;
 }
 
@@ -276,45 +400,145 @@ const hint = computed(() => {
 
 .cap-plan {
   display: grid;
-  gap: 1px;
+  gap: 9px;
   margin: 3px 0 0;
-  padding: 9px 0 0;
+  padding: 10px 0 0;
   border-top: 1px dashed #e2e6df;
   list-style: none;
 }
 
-.cap-plan li {
+.cap-slot {
+  display: grid;
+  gap: 4px;
+}
+
+.cap-slot__top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cap-slot__name {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 5px;
+  overflow: hidden;
+  color: #45534c;
+  font-size: 0.66rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cap-slot__name i {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border-radius: 999px;
+  color: #5b7568;
+  background: #edf2ee;
+  font-family: 'Manrope', sans-serif;
+  font-size: 0.52rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.cap-slot__name u {
+  flex: 0 0 auto;
+  color: #9aa7a1;
+  font-family: 'Manrope', sans-serif;
+  font-size: 0.53rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.cap-slot__name mark {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: #1f5d40;
+  background: var(--lime);
+  font-size: 0.52rem;
+  font-weight: 800;
+}
+
+.cap-slot--active .cap-slot__name { color: var(--ink); font-weight: 700; }
+.cap-slot--active .cap-track { box-shadow: 0 0 0 2px rgba(201, 240, 108, 0.5); }
+
+.cap-slot__note {
+  color: #9aa7a1;
+  font-size: 0.55rem;
+  line-height: 1.45;
+}
+
+.cap-slot__amount {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  font-family: 'Manrope', sans-serif;
+}
+
+.cap-slot__amount b {
+  color: #2c3b34;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.cap-slot__amount em {
+  color: #93a09a;
+  font-size: 0.6rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.cap-slot__status {
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 600;
+  text-align: right;
+}
+
+.cap-slot--empty .cap-fill { background: #dfe5e1; }
+.cap-slot--watch .cap-fill { background: linear-gradient(90deg, #7fbe63, #a9dd6b); }
+
+.cap-slot--warn .cap-fill { background: linear-gradient(90deg, #e0a83d, #f0cf6c); }
+.cap-slot--warn .cap-slot__status { color: #98661f; }
+
+.cap-slot--full .cap-fill { background: linear-gradient(90deg, #d1863c, #e6a94f); }
+.cap-slot--full .cap-slot__status { color: #98661f; }
+
+.cap-slot--over .cap-fill {
+  background: repeating-linear-gradient(-45deg, var(--red) 0 7px, #d96a60 7px 14px);
+}
+
+.cap-slot--over .cap-slot__amount b,
+.cap-slot--over .cap-slot__status { color: var(--red); }
+
+.cap-slot--spare {
+  padding-top: 8px;
+  border-top: 1px dotted #e6eae5;
+}
+
+.cap-plan__total {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 4px 0;
-  color: #55625c;
-  font-size: 0.65rem;
-}
-
-.cap-plan li b {
-  color: #33443c;
-  font-family: 'Manrope', sans-serif;
+  padding-top: 8px;
+  border-top: 1px solid #ecefe9;
+  color: var(--ink);
   font-size: 0.66rem;
   font-weight: 700;
 }
 
-.cap-plan__total {
-  margin-top: 3px;
-  padding-top: 7px !important;
-  border-top: 1px solid #ecefe9;
-  font-weight: 700;
+.cap-plan__total b {
+  color: var(--ink);
+  font-family: 'Manrope', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 800;
 }
-
-.cap-plan__total span,
-.cap-plan__total b { color: var(--ink) !important; }
-
-.cap-plan__spare span,
-.cap-plan__spare b { color: #2f7d59 !important; }
-
-.cap-plan__spare--negative span,
-.cap-plan__spare--negative b { color: var(--red) !important; }
 
 .cap-card--off {
   display: flex;
