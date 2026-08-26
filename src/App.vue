@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { Session } from '@supabase/supabase-js'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import AchievementGallery from './components/AchievementGallery.vue'
+import AchievementToast from './components/AchievementToast.vue'
 import AuthGate from './components/AuthGate.vue'
 import CashFlowChart from './components/CashFlowChart.vue'
 import BubbleGalaxy from './components/BubbleGalaxy.vue'
@@ -8,12 +10,15 @@ import CategoryDonut from './components/CategoryDonut.vue'
 import DailyCapBar from './components/DailyCapBar.vue'
 import EditTransactionModal from './components/EditTransactionModal.vue'
 import ExpenseAnalytics from './components/ExpenseAnalytics.vue'
+import HeatmapCalendar from './components/HeatmapCalendar.vue'
 import MoneyBuddy from './components/MoneyBuddy.vue'
 import PasswordResetScreen from './components/PasswordResetScreen.vue'
 import SettingsModal from './components/SettingsModal.vue'
+import StreakPill from './components/StreakPill.vue'
 import SummaryCards from './components/SummaryCards.vue'
 import TransactionForm from './components/TransactionForm.vue'
 import TransactionList from './components/TransactionList.vue'
+import { useAchievements } from './composables/useAchievements'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import type { Transaction, TransactionInput, TransactionType } from './types/transaction'
 import { createDemoTransactions, DEMO_USER_EMAIL } from './utils/demoData'
@@ -50,6 +55,7 @@ const busyId = ref<number | null>(null)
 const errorMessage = ref('')
 const successMessage = ref('')
 const settingsOpen = ref(false)
+const achievementsOpen = ref(false)
 const selectionMode = ref(false)
 const deletedTransaction = ref<Transaction | null>(null)
 const undoBusy = ref(false)
@@ -146,6 +152,24 @@ const recordBalance = computed(() => {
 const allIncome = computed(() => sumTransactions(transactions.value, 'income'))
 const allExpense = computed(() => sumTransactions(transactions.value, 'expense'))
 const allBalance = computed(() => allIncome.value - allExpense.value)
+
+const {
+  rows: achievementRows,
+  unlockedCount: achievementsUnlocked,
+  totalCount: achievementsTotal,
+  progressPercent: achievementsPercent,
+  loading: achievementsLoading,
+  currentPending: pendingBadge,
+  loadAchievements,
+  checkAchievements,
+  dismissPending,
+  reset: resetAchievements,
+} = useAchievements({
+  transactions: () => transactions.value,
+  balance: allBalance,
+  userId: () => session.value?.user.id ?? null,
+  demoMode,
+})
 
 const isRecordToday = computed(() => selectedRecordDate.value === todayDate)
 
@@ -265,12 +289,20 @@ const enterDemoMode = () => {
   viewMode.value = 'month'
   selectionMode.value = false
   navigateTo('record')
+  void loadAchievements()
   showMessage('เข้าโหมดดูตัวอย่างแล้ว ข้อมูลทั้งหมดเป็นตัวอย่างสมมติ')
 }
 
 const exitDemoMode = () => {
   demoMode.value = false
   clearAuthenticatedState()
+  navigateTo('record')
+}
+
+/** เลือกวันจากปฏิทินความร้อนแล้วกระโดดไปหน้าจดรายการของวันนั้น */
+const openRecordDay = (date: string) => {
+  if (date > todayDate) return
+  selectedRecordDate.value = date
   navigateTo('record')
 }
 
@@ -325,6 +357,7 @@ const saveTransaction = async (input: TransactionInput) => {
     editingTransaction.value = null
     formVersion.value += 1
     await loadTransactions()
+    await checkAchievements()
   }
 
   saving.value = false
@@ -359,6 +392,7 @@ const deleteTransaction = async (transaction: Transaction) => {
     if (editingTransaction.value?.id === transaction.id) editingTransaction.value = null
     transactions.value = transactions.value.filter((item) => item.id !== transaction.id)
     offerUndo(transaction)
+    await checkAchievements()
   }
 
   busyId.value = null
@@ -386,6 +420,7 @@ const undoDelete = async () => {
   } else {
     clearUndo()
     await loadTransactions()
+    await checkAchievements()
     showMessage('นำรายการกลับมาแล้ว')
   }
 
@@ -429,6 +464,7 @@ const deleteSelectedTransactions = async (ids: number[]) => {
     }
     transactions.value = transactions.value.filter(({ id }) => !deletedIds.has(id))
     selectionMode.value = false
+    await checkAchievements()
     showMessage(`ลบ ${ids.length} รายการเรียบร้อยแล้ว`)
   }
 
@@ -464,10 +500,12 @@ const resetAllTransactions = async () => {
 
 const clearAuthenticatedState = () => {
   clearUndo()
+  resetAchievements()
   transactions.value = []
   editingTransaction.value = null
   selectionMode.value = false
   settingsOpen.value = false
+  achievementsOpen.value = false
   loading.value = false
   saving.value = false
   bulkBusy.value = false
@@ -493,7 +531,11 @@ const initializeAuth = async () => {
     if (error) throw error
 
     session.value = data.session
-    if (data.session) await loadTransactions()
+    if (data.session) {
+      await loadTransactions()
+      await loadAchievements()
+      await checkAchievements()
+    }
 
     const { data: authListener } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (event === 'PASSWORD_RECOVERY') passwordRecovery.value = true
@@ -507,7 +549,12 @@ const initializeAuth = async () => {
         clearAuthenticatedState()
       } else if (nextUserId !== previousUserId) {
         clearAuthenticatedState()
-        window.setTimeout(() => void loadTransactions(), 0)
+        window.setTimeout(() => {
+          void loadTransactions().then(async () => {
+            await loadAchievements()
+            await checkAchievements()
+          })
+        }, 0)
       }
     })
 
@@ -526,7 +573,7 @@ const finishPasswordRecovery = () => {
   passwordRecovery.value = false
   showMessage('ตั้งรหัสผ่านใหม่เรียบร้อยแล้ว ครั้งต่อไปใช้รหัสนี้เข้าสู่ระบบได้เลย')
   if (session.value) {
-    void loadTransactions()
+    void loadTransactions().then(() => loadAchievements())
   }
 }
 
@@ -644,6 +691,16 @@ onBeforeUnmount(() => {
               <path d="M10 5H6.5A1.5 1.5 0 0 0 5 6.5v11A1.5 1.5 0 0 0 6.5 19H10M14 8l4 4-4 4M9 12h9" />
             </svg>
           </button>
+          <button
+            class="achievements-trigger"
+            type="button"
+            :aria-label="`เปิดตู้ความสำเร็จ ปลดล็อคแล้ว ${achievementsUnlocked} จาก ${achievementsTotal} ใบ`"
+            :title="`ความสำเร็จ ${achievementsUnlocked}/${achievementsTotal}`"
+            @click="achievementsOpen = true"
+          >
+            <span aria-hidden="true">🏆</span>
+            <b v-if="achievementsUnlocked > 0" aria-hidden="true">{{ achievementsUnlocked }}</b>
+          </button>
           <button class="settings-trigger" type="button" aria-label="เปิดการตั้งค่า" @click="settingsOpen = true">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 8.7a3.3 3.3 0 1 0 0 6.6 3.3 3.3 0 0 0 0-6.6Z" />
@@ -716,6 +773,8 @@ onBeforeUnmount(() => {
             <button class="text-link" type="button" @click="navigateTo('overview')">ดูภาพรวม →</button>
           </div>
         </header>
+
+        <StreakPill class="record-streak" :transactions="transactions" :persist="!demoMode" />
 
         <div class="record-grid">
           <TransactionForm
@@ -849,6 +908,14 @@ onBeforeUnmount(() => {
           />
         </section>
 
+        <HeatmapCalendar
+          class="overview-heatmap"
+          :transactions="transactions"
+          :month="isOverviewMonthValid ? selectedOverviewMonth : todayDate.slice(0, 7)"
+          @select-day="openRecordDay"
+          @change-month="viewMode = 'month'; selectedOverviewMonth = $event"
+        />
+
         <div class="overview-workspace">
           <TransactionList
             class="overview-list"
@@ -911,6 +978,19 @@ onBeforeUnmount(() => {
       @manage="startSelectionMode"
       @reset="resetAllTransactions"
     />
+
+    <AchievementGallery
+      :open="achievementsOpen"
+      :rows="achievementRows"
+      :unlocked-count="achievementsUnlocked"
+      :total-count="achievementsTotal"
+      :progress-percent="achievementsPercent"
+      :loading="achievementsLoading"
+      :read-only="demoMode"
+      @close="achievementsOpen = false"
+    />
+
+    <AchievementToast :badge="pendingBadge" @done="dismissPending" />
   </div>
 </template>
 
@@ -1082,6 +1162,47 @@ onBeforeUnmount(() => {
   animation: auth-spin 0.7s linear infinite;
 }
 
+.achievements-trigger {
+  position: relative;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.17);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.07);
+  font-size: 0.92rem;
+  line-height: 1;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.achievements-trigger:hover {
+  background: rgba(240, 214, 108, 0.22);
+  transform: translateY(-1px);
+}
+
+.achievements-trigger:focus-visible {
+  outline: 3px solid rgba(201, 240, 108, 0.45);
+  outline-offset: 2px;
+}
+
+.achievements-trigger b {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  padding: 1px 4px;
+  border-radius: 999px;
+  color: #194d3b;
+  background: var(--lime);
+  font-family: 'Noto Sans Thai', sans-serif;
+  font-size: 0.48rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
 .settings-trigger {
   display: grid;
   width: 34px;
@@ -1204,6 +1325,14 @@ onBeforeUnmount(() => {
 
 .day-navigation button:disabled {
   opacity: 0.4;
+}
+
+.record-streak {
+  margin: 0 3px 11px;
+}
+
+.overview-heatmap {
+  margin-top: 12px;
 }
 
 .record-grid {
@@ -1628,6 +1757,8 @@ onBeforeUnmount(() => {
   .overview-workspace,
   .today-column { gap: 9px; }
   .overview-workspace { margin-top: 9px; }
+  .overview-heatmap { margin-top: 9px; }
+  .record-streak { margin: 0 1px 9px; }
   .demo-banner { grid-template-columns: 32px minmax(0, 1fr); }
   .demo-banner__icon { width: 32px; height: 32px; border-radius: 9px; }
   .demo-banner button { grid-column: 1 / -1; }
