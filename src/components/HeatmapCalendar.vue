@@ -279,7 +279,11 @@ const legendLabels = computed(() =>
           @blur="hoveredCell = null"
         >
           <span class="heatmap-cell__day">{{ cell.day }}</span>
-          <span v-if="cell.count > 0" class="heatmap-cell__dot" aria-hidden="true"></span>
+
+          <span v-if="cell.spent > 0 || cell.income > 0" class="heatmap-cell__amounts">
+            <span v-if="cell.spent > 0" class="heatmap-cell__expense">{{ formatBaht(cell.spent) }}</span>
+            <span v-if="cell.income > 0" class="heatmap-cell__income">+{{ formatBaht(cell.income) }}</span>
+          </span>
         </button>
       </template>
     </div>
@@ -427,17 +431,20 @@ const legendLabels = computed(() =>
 
 .heatmap-cell {
   position: relative;
-  display: grid;
-  aspect-ratio: 1;
-  place-items: center;
-  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  min-height: 52px;
+  padding: 3px 3px 4px;
   border: 1px solid #e8ece7;
-  border-radius: 50%;
+  border-radius: 8px;
   color: #5c6b63;
-  background: #f4f6f1;
+  background: #f9fafb;
   font-family: 'Noto Sans Thai', sans-serif;
   font-size: 0.6rem;
   font-weight: 700;
+  overflow: hidden;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -448,8 +455,8 @@ const legendLabels = computed(() =>
 
 .heatmap-cell:not(:disabled):hover,
 .heatmap-cell:not(:disabled):focus-visible {
-  transform: scale(1.12);
-  box-shadow: 0 4px 12px rgba(23, 45, 36, 0.18);
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(23, 45, 36, 0.14);
 }
 
 .heatmap-cell:focus-visible {
@@ -462,30 +469,59 @@ const legendLabels = computed(() =>
   opacity: 0.4;
 }
 
-.heatmap-cell--today {
-  border-color: var(--green);
-  border-width: 2px;
+.heatmap-cell.heatmap-cell--today {
+  border: 2px solid var(--green);
+  padding: 2px 2px 3px;
 }
 
 .heatmap-cell__day {
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-weight: 700;
   line-height: 1;
+  text-align: left;
+  opacity: 0.75;
 }
 
-.heatmap-cell__dot {
-  position: absolute;
-  bottom: 3px;
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0.65;
+.heatmap-cell__amounts {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-width: 0;
 }
 
-.heatmap-cell--level-1 { color: #2f4a30; border-color: #c6e48b; background: #c6e48b; }
-.heatmap-cell--level-2 { color: #23401f; border-color: #7bc96f; background: #7bc96f; }
-.heatmap-cell--level-3 { color: #fff; border-color: #239a3b; background: #239a3b; }
-.heatmap-cell--level-4 { color: #fff; border-color: #196127; background: #196127; }
-.heatmap-cell--level-5 { color: #fff; border-color: #ff4444; background: #ff4444; }
+.heatmap-cell__expense,
+.heatmap-cell__income {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.1;
+}
+
+.heatmap-cell__expense {
+  color: #c2410c;
+  font-size: 0.6rem;
+  font-weight: 800;
+}
+
+.heatmap-cell__income {
+  color: #15803d;
+  font-size: 0.52rem;
+  font-weight: 700;
+}
+
+/* พื้นหลังเป็นเพียงเฉดอ่อน ๆ ให้ตัวเลขเด่นกว่า */
+.heatmap-cell--level-1 { border-color: #eaf4dc; background: #f4faea; }
+.heatmap-cell--level-2 { border-color: #dcefc4; background: #ebf7d8; }
+.heatmap-cell--level-3 { border-color: #cfe9ab; background: #e0f2c4; }
+.heatmap-cell--level-4 { border-color: #f2e4b0; background: #fdf6dd; }
+.heatmap-cell--level-5 { border-color: #f8cfcf; background: #fff5f5; }
+
+.heatmap-cell--level-5 .heatmap-cell__expense { color: #b91c1c; }
 
 .heatmap-tooltip {
   margin: 0;
@@ -518,18 +554,18 @@ const legendLabels = computed(() =>
 }
 
 .heatmap-swatch {
-  width: 11px;
-  height: 11px;
+  width: 13px;
+  height: 13px;
   border: 1px solid #e2e6df;
-  border-radius: 50%;
+  border-radius: 4px;
 }
 
-.heatmap-swatch--0 { background: #f4f6f1; }
-.heatmap-swatch--1 { border-color: #c6e48b; background: #c6e48b; }
-.heatmap-swatch--2 { border-color: #7bc96f; background: #7bc96f; }
-.heatmap-swatch--3 { border-color: #239a3b; background: #239a3b; }
-.heatmap-swatch--4 { border-color: #196127; background: #196127; }
-.heatmap-swatch--5 { border-color: #ff4444; background: #ff4444; }
+.heatmap-swatch--0 { border-color: #e8ece7; background: #f9fafb; }
+.heatmap-swatch--1 { border-color: #eaf4dc; background: #f4faea; }
+.heatmap-swatch--2 { border-color: #dcefc4; background: #ebf7d8; }
+.heatmap-swatch--3 { border-color: #cfe9ab; background: #e0f2c4; }
+.heatmap-swatch--4 { border-color: #f2e4b0; background: #fdf6dd; }
+.heatmap-swatch--5 { border-color: #f8cfcf; background: #fff5f5; }
 
 @media (max-width: 580px) {
   .heatmap-card { padding: 11px; }
@@ -539,6 +575,15 @@ const legendLabels = computed(() =>
   .heatmap-weekdays,
   .heatmap-grid { gap: 4px; }
   .heatmap-cell { font-size: 0.55rem; }
+  .heatmap-cell__expense { font-size: 0.55rem; }
+  .heatmap-cell__income { font-size: 0.48rem; }
+}
+
+/* จอแคบมาก: ซ่อนบรรทัดรายรับ เหลือเลขวันกับรายจ่าย */
+@media (max-width: 400px) {
+  .heatmap-cell { min-height: 46px; }
+  .heatmap-cell__income { display: none; }
+  .heatmap-cell__expense { font-size: 0.5rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
