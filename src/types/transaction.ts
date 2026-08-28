@@ -33,13 +33,3 @@ export type TransactionInput = Pick<
   Transaction,
   'description' | 'amount' | 'type' | 'category' | 'transaction_date'
 >
-export interface Transaction {
-  id: number
-  user_id: string
-  description: string
-  amount: number
-  type: TransactionType
-  category: TransactionCategory | null
-  transaction_date: string
-  created_at: string
-}

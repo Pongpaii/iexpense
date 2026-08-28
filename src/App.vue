@@ -1,17 +1,12 @@
 <script setup lang="ts">
-import type { Session } from '@supabase/supabase-js'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import AchievementGallery from './components/AchievementGallery.vue'
+import { computed, defineAsyncComponent, h, nextTick, onMounted, ref, watch } from 'vue'
 import AchievementToast from './components/AchievementToast.vue'
 import AuthGate from './components/AuthGate.vue'
-import CashFlowChart from './components/CashFlowChart.vue'
-import BubbleGalaxy from './components/BubbleGalaxy.vue'
 import CategoryDonut from './components/CategoryDonut.vue'
 import DailyCapBar from './components/DailyCapBar.vue'
 import EditTransactionModal from './components/EditTransactionModal.vue'
-import ExpenseAnalytics from './components/ExpenseAnalytics.vue'
-import HeatmapCalendar from './components/HeatmapCalendar.vue'
 import MoneyBuddy from './components/MoneyBuddy.vue'
+import SkeletonPanel from './components/SkeletonPanel.vue'
 import PasswordResetScreen from './components/PasswordResetScreen.vue'
 import SettingsModal from './components/SettingsModal.vue'
 import StreakPill from './components/StreakPill.vue'
@@ -19,13 +14,63 @@ import SummaryCards from './components/SummaryCards.vue'
 import TransactionForm from './components/TransactionForm.vue'
 import TransactionList from './components/TransactionList.vue'
 import { useAchievements } from './composables/useAchievements'
-import { isSupabaseConfigured, supabase } from './lib/supabase'
-import type { Transaction, TransactionInput, TransactionType } from './types/transaction'
+import { useAppMessages } from './composables/useAppMessages'
+import { useAuth } from './composables/useAuth'
+import { useInstallPrompt } from './composables/useInstallPrompt'
+import { useNavigation } from './composables/useNavigation'
+import { useTransactions } from './composables/useTransactions'
+import { useUndoDelete } from './composables/useUndoDelete'
+import { isSupabaseConfigured } from './lib/supabase'
+import type { Transaction, TransactionType } from './types/transaction'
 import { createDemoTransactions, DEMO_USER_EMAIL } from './utils/demoData'
 import { exportMonthlyCsv } from './utils/monthlyExport'
 
+/**
+ * คอมโพเนนต์หนักที่ไม่ได้ใช้ตั้งแต่วินาทีแรก แยกเป็น chunk ของตัวเอง
+ *
+ * หน้าแรกที่ผู้ใช้เห็นคือหน้า "จดรายการ" กราฟ ปฏิทินความร้อน ฟองเงิน
+ * และตู้ความสำเร็จจึงไม่จำเป็นต้องอยู่ใน bundle ก้อนแรก
+ * ใส่ loadingComponent ไว้เพื่อให้ระหว่างดาวน์โหลด chunk พื้นที่ยังคงความสูงเดิม
+ */
+const lazyPanel = (
+  loader: () => Promise<unknown>,
+  skeleton: { height?: number; rows?: number; variant?: 'chart' | 'list'; label: string },
+) =>
+  defineAsyncComponent({
+    loader: loader as never,
+    loadingComponent: {
+      name: 'LazyPanelFallback',
+      render: () => h(SkeletonPanel, skeleton),
+    },
+    delay: 120,
+  })
+
+const CashFlowChart = lazyPanel(() => import('./components/CashFlowChart.vue'), {
+  height: 210,
+  label: 'กำลังโหลดกราฟกระแสเงิน',
+})
+const ExpenseAnalytics = lazyPanel(() => import('./components/ExpenseAnalytics.vue'), {
+  height: 260,
+  label: 'กำลังโหลดบทวิเคราะห์รายจ่าย',
+})
+const HeatmapCalendar = lazyPanel(() => import('./components/HeatmapCalendar.vue'), {
+  height: 200,
+  label: 'กำลังโหลดปฏิทินการใช้จ่าย',
+})
+const BubbleGalaxy = lazyPanel(() => import('./components/BubbleGalaxy.vue'), {
+  height: 380,
+  label: 'กำลังโหลดฟองเงิน',
+})
+/**
+ * ตู้ความสำเร็จเป็น modal ไม่ใส่ loadingComponent เพราะ skeleton แบบ panel
+ * จะโผล่มาอยู่ในเลย์เอาต์ปกติ ไม่ใช่ในหน้าต่างซ้อน
+ * ใช้ v-if ที่ template คู่กัน เพื่อให้ chunk โหลดตอนกดเปิดจริง ๆ
+ */
+const AchievementGallery = defineAsyncComponent(
+  () => import('./components/AchievementGallery.vue'),
+)
+
 type ViewMode = 'month' | 'all'
-type AppPage = 'record' | 'overview' | 'bubbles'
 
 const toLocalIsoDate = (date: Date) => {
   const year = date.getFullYear()
@@ -34,44 +79,96 @@ const toLocalIsoDate = (date: Date) => {
   return `${year}-${month}-${day}`
 }
 
-const pageFromHash = (): AppPage => {
-  if (window.location.hash === '#overview') return 'overview'
-  if (window.location.hash === '#bubbles') return 'bubbles'
-  return 'record'
-}
-
-const transactions = ref<Transaction[]>([])
-const session = ref<Session | null>(null)
-const authReady = ref(!isSupabaseConfigured)
-const authError = ref('')
-const signingOut = ref(false)
-const editingTransaction = ref<Transaction | null>(null)
-const formVersion = ref(0)
-const loading = ref(false)
-const saving = ref(false)
-const bulkBusy = ref(false)
+// --- state ที่เป็นเรื่องของหน้าจอนี้จริง ๆ เท่านั้น ---
+// ตัวที่เกี่ยวกับข้อมูล/auth/การนำทาง ย้ายไปอยู่ใน composables แล้ว
 const exportBusy = ref(false)
-const busyId = ref<number | null>(null)
-const errorMessage = ref('')
-const successMessage = ref('')
 const settingsOpen = ref(false)
 const achievementsOpen = ref(false)
 const selectionMode = ref(false)
-const deletedTransaction = ref<Transaction | null>(null)
-const undoBusy = ref(false)
 const demoMode = ref(false)
-/** true เมื่อผู้ใช้เข้ามาจากลิงก์ตั้งรหัสผ่านใหม่ ต้องให้ตั้งรหัสก่อนใช้งานต่อ */
-const passwordRecovery = ref(false)
-const activePage = ref<AppPage>(pageFromHash())
 const viewMode = ref<ViewMode>('month')
 const todayDate = toLocalIsoDate(new Date())
 const selectedOverviewMonth = ref(todayDate.slice(0, 7))
 const selectedRecordDate = ref(todayDate)
 const isOverviewMonthValid = computed(() => /^\d{4}-(0[1-9]|1[0-2])$/.test(selectedOverviewMonth.value))
-let undoTimer: ReturnType<typeof window.setTimeout> | undefined
-let unsubscribeAuth: (() => void) | undefined
 
-const currentUserId = () => session.value?.user.id ?? null
+const { errorMessage, successMessage, showMessage, clearError, clearAll: clearMessages } =
+  useAppMessages()
+
+const {
+  canInstall,
+  installing: installBusy,
+  install: installApp,
+  dismiss: dismissInstall,
+} = useInstallPrompt()
+
+const showError = (message: string) => {
+  errorMessage.value = message
+}
+
+const { activePage, navigateTo, rememberReturnLocation, restoreReturnLocation, clearReturnLocation } =
+  useNavigation({
+    // กลับมาหน้าจดรายการแล้วต้องออกจากโหมดเลือกหลายรายการเสมอ
+    onNavigate: (page) => {
+      if (page === 'record') selectionMode.value = false
+    },
+  })
+
+// undo ต้องเกิดก่อน tx เพราะ tx ต้องรู้ว่าจะเปิดหน้าต่าง "เลิกทำ" ที่ไหน
+// ส่วน restore อ้างถึง tx แบบ lazy จึงไม่เป็นวงกลม
+const undo = useUndoDelete({ restore: (transaction) => tx.restoreTransaction(transaction) })
+
+const auth = useAuth({
+  onMessage: showMessage,
+  onError: showError,
+  onSessionActive: async () => {
+    await tx.loadTransactions()
+    await loadAchievements()
+    await checkAchievements()
+    await tx.flushOfflineQueue()
+  },
+  onSessionCleared: () => clearAuthenticatedState(),
+  onSignedIn: () => {
+    demoMode.value = false
+  },
+  rememberReturnLocation,
+  restoreReturnLocation,
+  clearReturnLocation,
+})
+
+const tx = useTransactions({
+  userId: auth.userId,
+  isDemoMode: () => demoMode.value,
+  onMessage: showMessage,
+  onError: showError,
+  clearError,
+  handleAuthError: auth.handleAuthError,
+  onMutated: async () => {
+    await checkAchievements()
+  },
+  onDeleted: undo.offerUndo,
+  onBeforeBulkChange: undo.clearUndo,
+})
+
+const { session, authReady, authError, sessionExpired, signingOut, passwordRecovery } = auth
+const { signOut, finishPasswordRecovery, cancelPasswordRecovery } = auth
+const { deletedTransaction, undoBusy, clearUndo, undoDelete } = undo
+const {
+  transactions,
+  editingTransaction,
+  formVersion,
+  loading,
+  saving,
+  bulkBusy,
+  busyId,
+  isOnline,
+  offlineSyncing,
+  offlinePendingCount,
+  saveTransaction,
+  editTransaction,
+  deleteTransaction,
+  flushOfflineQueue,
+} = tx
 
 const recordTransactions = computed(() =>
   transactions.value.filter(({ transaction_date }) => transaction_date === selectedRecordDate.value),
@@ -159,6 +256,7 @@ const {
   totalCount: achievementsTotal,
   progressPercent: achievementsPercent,
   loading: achievementsLoading,
+  errorMessage: achievementsError,
   currentPending: pendingBadge,
   loadAchievements,
   checkAchievements,
@@ -169,6 +267,11 @@ const {
   balance: allBalance,
   userId: () => session.value?.user.id ?? null,
   demoMode,
+})
+
+// ความสำเร็จเป็นฟีเจอร์เสริม แต่ถ้าเขียน/อ่านไม่สำเร็จต้องให้ผู้ใช้เห็นสาเหตุ ไม่ใช่เงียบไป
+watch(achievementsError, (message) => {
+  if (message) errorMessage.value = message
 })
 
 const isRecordToday = computed(() => selectedRecordDate.value === todayDate)
@@ -200,25 +303,6 @@ const emptyListHint = computed(() => {
   if (!selectedOverviewMonth.value) return 'เลือกเดือนที่ต้องการดูรายการ'
   return `ยังไม่มีรายการใน${overviewPeriodLabel.value}`
 })
-
-const navigateTo = (page: AppPage) => {
-  if (page === 'record') selectionMode.value = false
-  activePage.value = page
-  const targetHash = `#${page}`
-  if (window.location.hash !== targetHash) window.location.hash = targetHash
-}
-
-const syncPageFromHash = () => {
-  activePage.value = pageFromHash()
-  if (activePage.value === 'record') selectionMode.value = false
-}
-
-const showMessage = (message: string) => {
-  successMessage.value = message
-  window.setTimeout(() => {
-    if (successMessage.value === message) successMessage.value = ''
-  }, 3000)
-}
 
 const handleMonthlyExport = async () => {
   if (exportBusy.value || viewMode.value !== 'month') return
@@ -258,32 +342,11 @@ const handleMonthlyExport = async () => {
   }
 }
 
-const clearUndo = () => {
-  window.clearTimeout(undoTimer)
-  undoTimer = undefined
-  deletedTransaction.value = null
-}
-
-const offerUndo = (transaction: Transaction) => {
-  window.clearTimeout(undoTimer)
-  deletedTransaction.value = transaction
-  undoTimer = window.setTimeout(() => {
-    deletedTransaction.value = null
-    undoTimer = undefined
-  }, 6500)
-}
-
-const blockedInDemo = () => {
-  if (!demoMode.value) return false
-  errorMessage.value = 'โหมดดูตัวอย่างแก้ไขข้อมูลไม่ได้ เข้าสู่ระบบเพื่อบันทึกรายการจริง'
-  return true
-}
-
 const enterDemoMode = () => {
   demoMode.value = true
-  errorMessage.value = ''
+  clearError()
   clearUndo()
-  transactions.value = createDemoTransactions()
+  tx.setTransactions(createDemoTransactions())
   selectedRecordDate.value = todayDate
   selectedOverviewMonth.value = todayDate.slice(0, 7)
   viewMode.value = 'month'
@@ -306,127 +369,6 @@ const openRecordDay = (date: string) => {
   navigateTo('record')
 }
 
-const loadTransactions = async () => {
-  const userId = currentUserId()
-  if (!supabase || !userId) {
-    transactions.value = []
-    return
-  }
-
-  loading.value = true
-  errorMessage.value = ''
-
-  const { data, error } = await supabase
-    .from('transactions')
-    .select('*')
-    .eq('user_id', userId)
-    .order('transaction_date', { ascending: false })
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    errorMessage.value = `โหลดข้อมูลไม่สำเร็จ: ${error.message}`
-  } else {
-    transactions.value = (data ?? []) as Transaction[]
-  }
-
-  loading.value = false
-}
-
-const saveTransaction = async (input: TransactionInput) => {
-  if (blockedInDemo()) return
-  const userId = currentUserId()
-  if (!supabase || !userId) return
-
-  saving.value = true
-  errorMessage.value = ''
-
-  const query = editingTransaction.value
-    ? supabase
-        .from('transactions')
-        .update(input)
-        .eq('id', editingTransaction.value.id)
-        .eq('user_id', userId)
-    : supabase.from('transactions').insert({ ...input, user_id: userId })
-
-  const { error } = await query
-
-  if (error) {
-    errorMessage.value = `บันทึกข้อมูลไม่สำเร็จ: ${error.message}`
-  } else {
-    showMessage(editingTransaction.value ? 'แก้ไขรายการเรียบร้อยแล้ว' : 'เพิ่มรายการเรียบร้อยแล้ว')
-    editingTransaction.value = null
-    formVersion.value += 1
-    await loadTransactions()
-    await checkAchievements()
-  }
-
-  saving.value = false
-}
-
-const editTransaction = (transaction: Transaction) => {
-  if (blockedInDemo()) return
-  editingTransaction.value = transaction
-}
-
-const deleteTransaction = async (transaction: Transaction) => {
-  if (blockedInDemo()) return
-  const userId = currentUserId()
-  if (
-    !supabase ||
-    !userId ||
-    !window.confirm(`ต้องการลบ “${transaction.description}” ใช่หรือไม่?`)
-  ) return
-
-  busyId.value = transaction.id
-  errorMessage.value = ''
-
-  const { error } = await supabase
-    .from('transactions')
-    .delete()
-    .eq('id', transaction.id)
-    .eq('user_id', userId)
-
-  if (error) {
-    errorMessage.value = `ลบข้อมูลไม่สำเร็จ: ${error.message}`
-  } else {
-    if (editingTransaction.value?.id === transaction.id) editingTransaction.value = null
-    transactions.value = transactions.value.filter((item) => item.id !== transaction.id)
-    offerUndo(transaction)
-    await checkAchievements()
-  }
-
-  busyId.value = null
-}
-
-const undoDelete = async () => {
-  const userId = currentUserId()
-  if (!supabase || !userId || !deletedTransaction.value) return
-
-  const transaction = deletedTransaction.value
-  undoBusy.value = true
-  errorMessage.value = ''
-
-  const { error } = await supabase.from('transactions').insert({
-    user_id: userId,
-    description: transaction.description,
-    amount: transaction.amount,
-    type: transaction.type,
-    category: transaction.category,
-    transaction_date: transaction.transaction_date,
-  })
-
-  if (error) {
-    errorMessage.value = `กู้คืนรายการไม่สำเร็จ: ${error.message}`
-  } else {
-    clearUndo()
-    await loadTransactions()
-    await checkAchievements()
-    showMessage('นำรายการกลับมาแล้ว')
-  }
-
-  undoBusy.value = false
-}
-
 const startSelectionMode = async () => {
   viewMode.value = 'all'
   selectionMode.value = true
@@ -435,181 +377,33 @@ const startSelectionMode = async () => {
   document.querySelector('.overview-list')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
 }
 
-const deleteSelectedTransactions = async (ids: number[]) => {
-  if (blockedInDemo()) return
-  const userId = currentUserId()
-  if (
-    !supabase ||
-    !userId ||
-    ids.length === 0 ||
-    !window.confirm(`ยืนยันลบธุรกรรมที่เลือก ${ids.length} รายการ? การดำเนินการนี้ย้อนกลับไม่ได้`)
-  ) return
-
-  clearUndo()
-  bulkBusy.value = true
-  errorMessage.value = ''
-
-  const { error } = await supabase
-    .from('transactions')
-    .delete()
-    .eq('user_id', userId)
-    .in('id', ids)
-
-  if (error) {
-    errorMessage.value = `ลบรายการที่เลือกไม่สำเร็จ: ${error.message}`
-  } else {
-    const deletedIds = new Set(ids)
-    if (editingTransaction.value && deletedIds.has(editingTransaction.value.id)) {
-      editingTransaction.value = null
-    }
-    transactions.value = transactions.value.filter(({ id }) => !deletedIds.has(id))
-    selectionMode.value = false
-    await checkAchievements()
-    showMessage(`ลบ ${ids.length} รายการเรียบร้อยแล้ว`)
-  }
-
-  bulkBusy.value = false
+/** ปิดโหมดเลือกหลายรายการเมื่อการลบสำเร็จ ส่วนที่เหลือ useTransactions จัดการเอง */
+const handleBulkDelete = async (ids: number[]) => {
+  if (await tx.deleteSelectedTransactions(ids)) selectionMode.value = false
 }
 
-const resetAllTransactions = async () => {
-  if (blockedInDemo()) return
-  const userId = currentUserId()
-  if (!supabase || !userId || transactions.value.length === 0) return
-
-  clearUndo()
-  bulkBusy.value = true
-  errorMessage.value = ''
-
-  const { error } = await supabase
-    .from('transactions')
-    .delete()
-    .eq('user_id', userId)
-
-  if (error) {
-    errorMessage.value = `รีเซ็ตข้อมูลไม่สำเร็จ: ${error.message}`
-  } else {
-    transactions.value = []
-    editingTransaction.value = null
+const handleResetAll = async () => {
+  if (await tx.resetAllTransactions()) {
     selectionMode.value = false
     settingsOpen.value = false
-    showMessage('รีเซ็ตข้อมูลทั้งหมดเรียบร้อยแล้ว')
   }
-
-  bulkBusy.value = false
 }
 
+/** ล้างทุกอย่างที่ผูกกับผู้ใช้คนก่อน ใช้ตอนออกจากระบบหรือสลับบัญชี */
 const clearAuthenticatedState = () => {
   clearUndo()
   resetAchievements()
-  transactions.value = []
-  editingTransaction.value = null
+  tx.resetState()
   selectionMode.value = false
   settingsOpen.value = false
   achievementsOpen.value = false
-  loading.value = false
-  saving.value = false
-  bulkBusy.value = false
   exportBusy.value = false
-  undoBusy.value = false
-  busyId.value = null
-  errorMessage.value = ''
-  successMessage.value = ''
-  formVersion.value += 1
+  clearMessages()
 }
 
-const initializeAuth = async () => {
-  if (!supabase) {
-    authReady.value = true
-    return
-  }
-
-  authReady.value = false
-  authError.value = ''
-
-  try {
-    const { data, error } = await supabase.auth.getSession()
-    if (error) throw error
-
-    session.value = data.session
-    if (data.session) {
-      await loadTransactions()
-      await loadAchievements()
-      await checkAchievements()
-    }
-
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, nextSession) => {
-      if (event === 'PASSWORD_RECOVERY') passwordRecovery.value = true
-      const previousUserId = session.value?.user.id
-      const nextUserId = nextSession?.user.id
-      session.value = nextSession
-      authError.value = ''
-      if (nextSession) demoMode.value = false
-
-      if (!nextSession) {
-        clearAuthenticatedState()
-      } else if (nextUserId !== previousUserId) {
-        clearAuthenticatedState()
-        window.setTimeout(() => {
-          void loadTransactions().then(async () => {
-            await loadAchievements()
-            await checkAchievements()
-          })
-        }, 0)
-      }
-    })
-
-    unsubscribeAuth = () => authListener.subscription.unsubscribe()
-  } catch (error) {
-    session.value = null
-    authError.value = error instanceof Error
-      ? error.message
-      : 'ตรวจสอบสถานะการเข้าสู่ระบบไม่สำเร็จ'
-  } finally {
-    authReady.value = true
-  }
-}
-
-const finishPasswordRecovery = () => {
-  passwordRecovery.value = false
-  showMessage('ตั้งรหัสผ่านใหม่เรียบร้อยแล้ว ครั้งต่อไปใช้รหัสนี้เข้าสู่ระบบได้เลย')
-  if (session.value) {
-    void loadTransactions().then(() => loadAchievements())
-  }
-}
-
-const cancelPasswordRecovery = async () => {
-  passwordRecovery.value = false
-  await signOut()
-}
-
-const signOut = async () => {
-  if (!supabase || signingOut.value) return
-
-  signingOut.value = true
-  errorMessage.value = ''
-  const { error } = await supabase.auth.signOut()
-
-  if (error) {
-    errorMessage.value = `ออกจากระบบไม่สำเร็จ: ${error.message}`
-  } else {
-    session.value = null
-    clearAuthenticatedState()
-  }
-
-  signingOut.value = false
-}
-
-onMounted(() => {
-  window.addEventListener('hashchange', syncPageFromHash)
-  void initializeAuth()
-})
-
-onBeforeUnmount(() => {
-  window.removeEventListener('hashchange', syncPageFromHash)
-  window.clearTimeout(undoTimer)
-  unsubscribeAuth?.()
-
-})
+// การถอด listener ของ hash, undo timer และ auth subscription
+// อยู่ใน onBeforeUnmount ของแต่ละ composable แล้ว
+onMounted(() => void auth.initialize())
 </script>
 
 <template>
@@ -629,7 +423,9 @@ onBeforeUnmount(() => {
 
   <AuthGate
     v-else-if="!session && !demoMode"
-    :initial-error="authError"
+    :initial-error="sessionExpired
+      ? 'เซสชันหมดอายุแล้ว กรุณาเข้าสู่ระบบใหม่ ระบบจะพากลับไปหน้าที่ค้างไว้'
+      : authError"
     @demo="enterDemoMode"
   />
 
@@ -654,6 +450,33 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="nav-actions">
+          <span
+            v-if="!isOnline || offlinePendingCount > 0"
+            class="offline-badge"
+            :class="{ 'offline-badge--syncing': isOnline && offlineSyncing }"
+            role="status"
+            aria-live="polite"
+            :title="!isOnline
+              ? 'ไม่มีการเชื่อมต่ออินเทอร์เน็ต รายการที่จดจะถูกเก็บไว้ในคิว'
+              : `มี ${offlinePendingCount} รายการรอซิงก์`"
+          >
+            <span class="offline-dot" aria-hidden="true"></span>
+            <span class="offline-copy">
+              <small>{{ !isOnline ? 'ออฟไลน์' : offlineSyncing ? 'กำลังซิงก์' : 'รอซิงก์' }}</small>
+              <b v-if="offlinePendingCount > 0">{{ offlinePendingCount }} รายการ</b>
+              <b v-else>เก็บไว้ในเครื่อง</b>
+            </span>
+            <button
+              v-if="isOnline && offlinePendingCount > 0 && !offlineSyncing"
+              type="button"
+              class="offline-retry"
+              aria-label="ลองซิงก์อีกครั้ง"
+              @click="flushOfflineQueue()"
+            >
+              ซิงก์
+            </button>
+          </span>
+
           <span
             class="connection-badge"
             :class="demoMode ? 'demo-badge' : 'connected'"
@@ -732,6 +555,25 @@ onBeforeUnmount(() => {
         </div>
       </aside>
 
+      <aside v-if="canInstall" class="install-banner" role="complementary">
+        <div class="install-banner__icon" aria-hidden="true">⬇</div>
+        <div class="install-banner__copy">
+          <strong>ติดตั้ง Money Flow ไว้บนเครื่อง</strong>
+          <p>เปิดได้จากหน้าโฮมเหมือนแอปทั่วไป และใช้จดรายการตอนไม่มีเน็ตได้</p>
+        </div>
+        <button class="install-banner__primary" type="button" :disabled="installBusy" @click="installApp">
+          {{ installBusy ? 'กำลังติดตั้ง...' : 'ติดตั้ง' }}
+        </button>
+        <button
+          class="install-banner__close"
+          type="button"
+          aria-label="ไม่ติดตั้งตอนนี้"
+          @click="dismissInstall()"
+        >
+          ×
+        </button>
+      </aside>
+
       <div v-if="errorMessage" class="alert alert--error" role="alert">
         <span>!</span>{{ errorMessage }}
         <button type="button" aria-label="ปิดข้อความ" @click="errorMessage = ''">×</button>
@@ -797,6 +639,7 @@ onBeforeUnmount(() => {
             />
 
             <SummaryCards
+              :loading="loading && transactions.length === 0"
               :balance="recordBalance"
               :income="recordIncome"
               :expense="recordExpense"
@@ -815,7 +658,7 @@ onBeforeUnmount(() => {
               :empty-hint="isRecordToday ? 'วันนี้ยังไม่มีรายการ เริ่มจดจากฟอร์มได้เลย' : `${recordDateLabel} ยังไม่มีรายการ`"
               @edit="editTransaction"
               @delete="deleteTransaction"
-              @bulk-delete="deleteSelectedTransactions"
+              @bulk-delete="handleBulkDelete"
               @cancel-selection="selectionMode = false"
             />
 
@@ -899,6 +742,7 @@ onBeforeUnmount(() => {
           </div>
 
           <SummaryCards
+            :loading="loading && transactions.length === 0"
             :balance="balance"
             :income="income"
             :expense="expense"
@@ -928,7 +772,7 @@ onBeforeUnmount(() => {
             :empty-hint="emptyListHint"
             @edit="editTransaction"
             @delete="deleteTransaction"
-            @bulk-delete="deleteSelectedTransactions"
+            @bulk-delete="handleBulkDelete"
             @cancel-selection="selectionMode = false"
           />
 
@@ -976,10 +820,11 @@ onBeforeUnmount(() => {
       :read-only="demoMode"
       @close="settingsOpen = false"
       @manage="startSelectionMode"
-      @reset="resetAllTransactions"
+      @reset="handleResetAll"
     />
 
     <AchievementGallery
+      v-if="achievementsOpen"
       :open="achievementsOpen"
       :rows="achievementRows"
       :unlocked-count="achievementsUnlocked"
@@ -1095,6 +940,174 @@ onBeforeUnmount(() => {
   max-width: 210px;
   padding: 5px 9px;
   border-radius: 10px;
+}
+
+.install-banner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-bottom: 12px;
+  padding: 13px 15px;
+  border: 1px solid #cfe3d6;
+  border-radius: 14px;
+  background: linear-gradient(120deg, #f2f9f5, #eaf4ee);
+}
+
+.install-banner__icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  border-radius: 10px;
+  color: #fff;
+  background: #2f815c;
+  font-size: 0.95rem;
+}
+
+.install-banner__copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.install-banner__copy strong {
+  color: #1f5d40;
+  font-family: 'Noto Sans Thai', sans-serif;
+  font-size: 0.74rem;
+}
+
+.install-banner__copy p {
+  margin: 2px 0 0;
+  color: #62736a;
+  font-family: 'Noto Sans Thai', sans-serif;
+  font-size: 0.63rem;
+  line-height: 1.5;
+}
+
+.install-banner__primary {
+  min-height: 36px;
+  flex: 0 0 auto;
+  padding: 8px 15px;
+  border: 0;
+  border-radius: 9px;
+  color: #fff;
+  background: #2f815c;
+  font-family: 'Noto Sans Thai', sans-serif;
+  font-size: 0.68rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.install-banner__primary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.install-banner__close {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  border: 0;
+  border-radius: 8px;
+  color: #7b8a82;
+  background: transparent;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.install-banner__close:hover {
+  color: #1f5d40;
+  background: rgba(47, 129, 92, 0.1);
+}
+
+.install-banner__primary:focus-visible,
+.install-banner__close:focus-visible {
+  outline: 3px solid rgba(47, 129, 92, 0.35);
+  outline-offset: 2px;
+}
+
+@media (max-width: 580px) {
+  .install-banner {
+    flex-wrap: wrap;
+  }
+
+  .install-banner__primary {
+    width: 100%;
+  }
+}
+
+.offline-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 9px;
+  border: 1px solid rgba(240, 190, 108, 0.4);
+  border-radius: 10px;
+  background: rgba(240, 190, 108, 0.16);
+}
+
+.offline-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: #f0be6c;
+}
+
+.offline-badge--syncing .offline-dot {
+  animation: offline-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes offline-pulse {
+  50% { opacity: 0.25; }
+}
+
+.offline-copy {
+  display: grid;
+  min-width: 0;
+  line-height: 1.15;
+}
+
+.offline-copy small {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.45rem;
+  font-weight: 600;
+}
+
+.offline-copy b {
+  overflow: hidden;
+  color: #f7e2bd;
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.offline-retry {
+  padding: 4px 7px;
+  border: 1px solid rgba(247, 226, 189, 0.35);
+  border-radius: 7px;
+  color: #f7e2bd;
+  background: transparent;
+  font-family: 'Noto Sans Thai', sans-serif;
+  font-size: 0.55rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.offline-retry:hover {
+  color: #194d3b;
+  background: #f7e2bd;
+}
+
+.offline-retry:focus-visible {
+  outline: 2px solid rgba(201, 240, 108, 0.55);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .offline-badge--syncing .offline-dot { animation: none; }
 }
 
 .account-copy {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import {
   transactionCategories,
   type Transaction,
@@ -7,6 +7,11 @@ import {
   type TransactionInput,
   type TransactionType,
 } from '../types/transaction'
+import {
+  DESCRIPTION_MAX_LENGTH,
+  validateTransactionInput,
+  type TransactionFieldErrors,
+} from '../schemas/transaction.schema'
 
 const props = defineProps<{
   editing: Transaction | null
@@ -46,16 +51,30 @@ const form = reactive<FormState>({
 
 const isEditing = computed(() => props.editing !== null)
 
+const fieldErrors = ref<TransactionFieldErrors>({})
+/** กันกดซ้ำในจังหวะที่ prop busy ยังไม่ทันอัปเดตกลับมา */
+const submitLocked = ref(false)
+
+const isBusy = computed(() => props.busy || submitLocked.value)
+
+const clearFieldError = (field: keyof TransactionFieldErrors) => {
+  if (fieldErrors.value[field]) {
+    fieldErrors.value = { ...fieldErrors.value, [field]: undefined }
+  }
+}
+
 const resetForm = () => {
   form.description = ''
   form.amount = null
   form.type = 'expense'
   form.category = ''
   form.transaction_date = defaultTransactionDate()
+  fieldErrors.value = {}
 }
 
 const toggleCategory = (category: TransactionCategory) => {
   form.category = form.category === category ? '' : category
+  clearFieldError('category')
 }
 
 watch(
@@ -71,6 +90,7 @@ watch(
     form.type = transaction.type
     form.category = transaction.category ?? ''
     form.transaction_date = transaction.transaction_date
+    fieldErrors.value = {}
   },
   { immediate: true },
 )
@@ -82,18 +102,38 @@ watch(
   },
 )
 
-const handleSubmit = () => {
-  const description = form.description.trim()
-  if (!description || !form.amount || form.amount <= 0) return
+let unlockTimer: ReturnType<typeof setTimeout> | undefined
 
-  emit('submit', {
-    description,
-    amount: Number(form.amount),
+const handleSubmit = () => {
+  if (isBusy.value || props.disabled) return
+
+  const candidate = {
+    description: form.description,
+    amount: form.amount === null ? Number.NaN : Number(form.amount),
     type: form.type,
-    category: form.category || null,
+    category: form.category === '' ? null : form.category,
     transaction_date: form.transaction_date,
-  })
+  }
+
+  const { success, data, fieldErrors: errors } = validateTransactionInput(candidate)
+
+  if (!success || !data) {
+    fieldErrors.value = errors
+    return
+  }
+
+  fieldErrors.value = {}
+  // ล็อกสั้น ๆ กันดับเบิลคลิก/ดับเบิลแท็ป ก่อนที่ prop busy จะกลายเป็น true
+  submitLocked.value = true
+  clearTimeout(unlockTimer)
+  unlockTimer = setTimeout(() => {
+    submitLocked.value = false
+  }, 800)
+
+  emit('submit', data satisfies TransactionInput)
 }
+
+onBeforeUnmount(() => clearTimeout(unlockTimer))
 </script>
 
 <template>
@@ -109,16 +149,22 @@ const handleSubmit = () => {
     </div>
 
     <form class="transaction-form" @submit.prevent="handleSubmit">
-      <fieldset :disabled="busy || disabled">
+      <fieldset :disabled="isBusy || disabled">
         <label class="field field--wide">
           <span>ชื่อรายการ</span>
           <input
             v-model="form.description"
             type="text"
-            maxlength="120"
+            :maxlength="DESCRIPTION_MAX_LENGTH"
             placeholder="เช่น ค่าอาหารกลางวัน"
             required
+            :aria-invalid="Boolean(fieldErrors.description)"
+            :aria-describedby="fieldErrors.description ? 'form-error-description' : undefined"
+            @input="clearFieldError('description')"
           />
+          <small v-if="fieldErrors.description" id="form-error-description" class="field-error" role="alert">
+            {{ fieldErrors.description }}
+          </small>
         </label>
 
         <label class="field">
@@ -130,12 +176,28 @@ const handleSubmit = () => {
             step="0.01"
             placeholder="0.00"
             required
+            :aria-invalid="Boolean(fieldErrors.amount)"
+            :aria-describedby="fieldErrors.amount ? 'form-error-amount' : undefined"
+            @input="clearFieldError('amount')"
           />
+          <small v-if="fieldErrors.amount" id="form-error-amount" class="field-error" role="alert">
+            {{ fieldErrors.amount }}
+          </small>
         </label>
 
         <label class="field">
           <span>วันที่</span>
-          <input v-model="form.transaction_date" type="date" required />
+          <input
+            v-model="form.transaction_date"
+            type="date"
+            required
+            :aria-invalid="Boolean(fieldErrors.transaction_date)"
+            :aria-describedby="fieldErrors.transaction_date ? 'form-error-date' : undefined"
+            @input="clearFieldError('transaction_date')"
+          />
+          <small v-if="fieldErrors.transaction_date" id="form-error-date" class="field-error" role="alert">
+            {{ fieldErrors.transaction_date }}
+          </small>
         </label>
 
         <div class="field field--wide">
@@ -174,11 +236,14 @@ const handleSubmit = () => {
               <i aria-hidden="true">✓</i>
             </button>
           </div>
+          <small v-if="fieldErrors.category" class="field-error" role="alert">
+            {{ fieldErrors.category }}
+          </small>
         </div>
 
-        <button class="primary-button field--wide" type="submit">
-          <span v-if="busy" class="spinner" aria-hidden="true"></span>
-          {{ busy ? 'กำลังบันทึก...' : isEditing ? 'บันทึกการแก้ไข' : 'เพิ่มรายการ' }}
+        <button class="primary-button field--wide" type="submit" :disabled="isBusy || disabled">
+          <span v-if="isBusy" class="spinner" aria-hidden="true"></span>
+          {{ isBusy ? 'กำลังบันทึก...' : isEditing ? 'บันทึกการแก้ไข' : 'เพิ่มรายการ' }}
         </button>
       </fieldset>
     </form>
@@ -186,6 +251,22 @@ const handleSubmit = () => {
 </template>
 
 <style scoped>
+.field-error {
+  display: block;
+  margin-top: 4px;
+  color: #b3261e;
+  font-family: 'Noto Sans Thai', sans-serif;
+  font-size: 0.6rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+/* ให้ขอบ input เปลี่ยนสีเมื่อ validate ไม่ผ่าน ไม่ใช่แค่ข้อความข้างล่าง */
+.field input[aria-invalid='true'] {
+  border-color: #d8574d;
+  background: #fdf6f5;
+}
+
 .category-field { gap: 7px; }
 
 .category-label {

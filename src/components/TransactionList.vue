@@ -12,8 +12,10 @@ const props = withDefaults(
     bulkBusy: boolean
     emptyHint: string
     readOnly?: boolean
+    /** จำนวนแถวที่วาดต่อหนึ่งหน้า ตั้งเป็น 0 เพื่อวาดทั้งหมด */
+    pageSize?: number
   }>(),
-  { readOnly: false },
+  { readOnly: false, pageSize: 50 },
 )
 
 const emit = defineEmits<{
@@ -24,6 +26,31 @@ const emit = defineEmits<{
 }>()
 
 const selectedIds = ref<number[]>([])
+
+/**
+ * วาดทีละหน้าเพื่อไม่ให้ DOM บวมเมื่อประวัติยาวเป็นพันแถว
+ * ข้อมูลทั้งหมดยังอยู่ใน props ครบ (ยอดสรุปจึงถูกต้อง) แค่จำกัดจำนวนที่ render
+ */
+const visibleCount = ref(props.pageSize > 0 ? props.pageSize : Number.POSITIVE_INFINITY)
+
+const visibleTransactions = computed(() =>
+  Number.isFinite(visibleCount.value)
+    ? props.transactions.slice(0, visibleCount.value)
+    : props.transactions,
+)
+
+const hiddenCount = computed(() =>
+  Math.max(0, props.transactions.length - visibleTransactions.value.length),
+)
+
+const showMore = () => {
+  const step = props.pageSize > 0 ? props.pageSize : props.transactions.length
+  visibleCount.value = Math.min(visibleCount.value + step, props.transactions.length)
+}
+
+const resetVisibleCount = () => {
+  visibleCount.value = props.pageSize > 0 ? props.pageSize : Number.POSITIVE_INFINITY
+}
 
 const allSelected = computed(
   () => props.transactions.length > 0 && selectedIds.value.length === props.transactions.length,
@@ -50,6 +77,8 @@ watch(
   () => props.selectionMode,
   (enabled) => {
     if (!enabled) selectedIds.value = []
+    // เข้า/ออกโหมดเลือก ชุดข้อมูลที่แสดงเปลี่ยนไปคนละชุด เริ่มนับหน้าใหม่
+    resetVisibleCount()
   },
 )
 
@@ -58,6 +87,12 @@ watch(
   (transactions) => {
     const availableIds = new Set(transactions.map(({ id }) => id))
     selectedIds.value = selectedIds.value.filter((id) => availableIds.has(id))
+
+    // คงจำนวนที่ผู้ใช้กดขยายไว้ แต่ไม่ให้เกินจำนวนที่มีจริง
+    if (Number.isFinite(visibleCount.value)) {
+      const floor = props.pageSize > 0 ? props.pageSize : transactions.length
+      visibleCount.value = Math.max(floor, Math.min(visibleCount.value, transactions.length))
+    }
   },
 )
 </script>
@@ -92,10 +127,16 @@ watch(
       </button>
     </div>
 
-    <div v-if="loading" class="state-box" role="status">
-      <span class="spinner spinner--dark" aria-hidden="true"></span>
-      <p>กำลังโหลดข้อมูล...</p>
-    </div>
+    <ul v-if="loading" class="transaction-skeleton" role="status" aria-label="กำลังโหลดรายการ">
+      <li v-for="row in 5" :key="row">
+        <span class="skeleton skeleton--circle" style="width: 36px; height: 36px"></span>
+        <span class="transaction-skeleton__copy">
+          <span class="skeleton skeleton--text" :style="{ width: `${68 - row * 5}%` }"></span>
+          <span class="skeleton skeleton--text" style="width: 34%; height: 8px"></span>
+        </span>
+        <span class="skeleton skeleton--text" style="width: 58px"></span>
+      </li>
+    </ul>
 
     <div v-else-if="transactions.length === 0" class="state-box">
       <div class="empty-icon" aria-hidden="true">₿</div>
@@ -105,7 +146,7 @@ watch(
 
     <TransitionGroup v-else tag="ul" name="transaction" class="transaction-list">
       <li
-        v-for="transaction in transactions"
+        v-for="transaction in visibleTransactions"
         :key="transaction.id"
         class="transaction-item"
         :class="{
@@ -172,6 +213,16 @@ watch(
         </div>
       </li>
     </TransitionGroup>
+
+    <button
+      v-if="!loading && hiddenCount > 0"
+      class="load-more-button"
+      type="button"
+      @click="showMore"
+    >
+      โหลดเพิ่ม
+      <small>เหลืออีก {{ hiddenCount }} รายการ</small>
+    </button>
   </section>
 </template>
 
@@ -193,6 +244,63 @@ watch(
 
 .list-panel .state-box {
   flex: 1;
+}
+
+.transaction-skeleton {
+  display: grid;
+  gap: 18px;
+  margin: 0;
+  padding: 6px 0;
+  list-style: none;
+}
+
+.transaction-skeleton li {
+  display: grid;
+  align-items: center;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  gap: 11px;
+}
+
+.transaction-skeleton__copy {
+  display: grid;
+  gap: 6px;
+}
+
+.load-more-button {
+  display: flex;
+  width: 100%;
+  min-height: 38px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border: 1px dashed #cfdad4;
+  border-radius: 10px;
+  color: #2f6b50;
+  background: #f7faf8;
+  font-family: 'Noto Sans Thai', sans-serif;
+  font-size: 0.67rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.16s, background 0.16s;
+}
+
+.load-more-button:hover {
+  border-color: #93aa9f;
+  background: #eef5f1;
+}
+
+.load-more-button:focus-visible {
+  outline: 3px solid rgba(47, 129, 92, 0.35);
+  outline-offset: 2px;
+}
+
+.load-more-button small {
+  color: #8b968f;
+  font-size: 0.55rem;
+  font-weight: 600;
 }
 
 .list-heading { align-items: center; }

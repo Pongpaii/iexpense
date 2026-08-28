@@ -1,0 +1,39 @@
+# Security and caching headers for Netlify / Cloudflare Pages.
+# Vite copies public/ into dist/, so this ships with the build.
+# Vercel reads vercel.json instead - keep the two in sync.
+#
+# About the CSP: the "default-src 'self'; script-src 'self'" recipe you often
+# see would break this app. It needs, specifically:
+#   - fonts.googleapis.com  because src/style.css starts with an @import of Google Fonts
+#   - fonts.gstatic.com     for the actual font files
+#   - *.supabase.co         for the REST/auth calls (wss for realtime, if enabled later)
+#   - 'unsafe-inline' on style-src because Vue writes inline style attributes
+#     for :style bindings (progress bars, chart sizing, skeleton widths)
+#   - *.ingest.sentry.io    only matters when VITE_SENTRY_DSN is set
+# Self-hosting the fonts would let you drop the two font origins.
+
+/*
+  Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.ingest.sentry.io; worker-src 'self'; manifest-src 'self'; upgrade-insecure-requests
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  Cross-Origin-Opener-Policy: same-origin
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+
+# ไฟล์ใน assets/ มี hash ในชื่อ เปลี่ยนเนื้อหาแล้วชื่อเปลี่ยนด้วย จึง cache ยาวได้
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# service worker ต้องไม่ถูก cache ไม่งั้นผู้ใช้จะติดเวอร์ชันเก่าไม่รู้จบ
+/sw.js
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/registerSW.js
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/index.html
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/manifest.webmanifest
+  Cache-Control: public, max-age=3600

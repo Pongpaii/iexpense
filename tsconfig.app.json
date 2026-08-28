@@ -1,7 +1,8 @@
 {
   "extends": "@vue/tsconfig/tsconfig.dom.json",
+  // ไม่ exclude __tests__ เพื่อให้ `npm run type-check` ตรวจไฟล์เทสต์ด้วย
+  // เทสต์ที่ compile ไม่ผ่านคือเทสต์ที่พึ่งพาไม่ได้
   "include": ["env.d.ts", "src/**/*", "src/**/*.vue"],
-  "exclude": ["src/**/__tests__/*"],
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
     "strict": true,

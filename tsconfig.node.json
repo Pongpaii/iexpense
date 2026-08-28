@@ -1,10 +1,14 @@
 {
   "extends": "@tsconfig/node24/tsconfig.json",
-  "include": ["vite.config.*"],
+  "include": ["vite.config.ts", "vitest.config.ts"],
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "types": ["node"]
+    "types": ["node"],
+    // Vite อ่าน vite.config.ts เองอยู่แล้ว โปรเจกต์นี้ต้องการแค่ type-check
+    // ถ้าไม่ปิด emit ทุกครั้งที่ build จะได้ vite.config.js โผล่มาข้าง ๆ ไฟล์ต้นฉบับ
+    // แล้ว include เดิม ("vite.config.*") ก็จะดูดไฟล์ที่ตัวเองสร้างกลับเข้ามาอีก
+    "noEmit": true
   }
 }

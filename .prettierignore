@@ -1,0 +1,9 @@
+dist
+dev-dist
+coverage
+node_modules
+android
+ios
+public
+package-lock.json
+*.tsbuildinfo

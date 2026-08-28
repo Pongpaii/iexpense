@@ -1,0 +1,17 @@
+# Netlify deployment config.
+# Security and cache headers live in public/_headers (Vite copies it into dist/),
+# so they are not duplicated here.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "24"
+
+# SPA fallback: การนำทางในแอปใช้ hash แต่ผู้ใช้อาจเปิด path ตรง ๆ
+# ต้องส่งกลับ index.html ไม่ใช่ 404
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

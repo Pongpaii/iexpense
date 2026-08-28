@@ -803,3 +803,47 @@ code {
     gap: 7px;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Skeleton loaders
+   ใช้แทนสปินเนอร์ในจุดที่รู้รูปร่างของเนื้อหาล่วงหน้า เพื่อลดอาการหน้าจอกระตุก
+   ตอนข้อมูลมาถึง (layout shift) และให้ผู้ใช้เห็นว่ากำลังจะได้อะไร
+   --------------------------------------------------------------------------- */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #e9efeb;
+}
+
+.skeleton::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.72), transparent);
+  content: '';
+  transform: translateX(-100%);
+  animation: skeleton-sweep 1.35s ease-in-out infinite;
+}
+
+@keyframes skeleton-sweep {
+  to { transform: translateX(100%); }
+}
+
+.skeleton--text {
+  height: 10px;
+  border-radius: 999px;
+}
+
+.skeleton--title {
+  height: 14px;
+  border-radius: 999px;
+}
+
+.skeleton--circle {
+  border-radius: 50%;
+}
+
+/* ผู้ใช้ที่ตั้งค่าลดการเคลื่อนไหวควรเห็นบล็อกนิ่ง ๆ ไม่ใช่แสงวิ่ง */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after { animation: none; opacity: 0.35; }
+}

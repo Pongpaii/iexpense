@@ -1,6 +1,11 @@
 -- Money Flow: authenticated database setup
 -- Run this file in Supabase Dashboard > SQL Editor for a new project.
 --
+-- This file is the BASELINE. Changes made after the baseline belong in
+-- supabase/migrations/ as their own timestamped file (see the README there),
+-- and should also be folded back into this file so a brand-new project still
+-- gets the complete, current schema in one run.
+--
 -- Existing projects must first assign every legacy row to a real auth.users UUID
 -- before `alter column user_id set not null` can succeed. Back up the table first.
 -- Never replace these owner policies with anonymous `using (true)` policies.
@@ -25,6 +30,14 @@ add column if not exists user_id uuid references auth.users(id) on delete cascad
 
 alter table public.transactions
 alter column user_id set default auth.uid();
+
+-- Declarative upper bound so a bad amount is rejected even if the trigger below
+-- is ever dropped. Matches AMOUNT_MAX in src/schemas/transaction.schema.ts.
+alter table public.transactions
+drop constraint if exists transactions_amount_max_check;
+
+alter table public.transactions
+add constraint transactions_amount_max_check check (amount <= 999999999);
 
 -- This intentionally fails if legacy rows have not been assigned to an owner.
 alter table public.transactions
@@ -78,6 +91,100 @@ on public.transactions (user_id);
 create index if not exists transactions_date_created_idx
 on public.transactions (transaction_date desc, created_at desc);
 
+-- Server-side validation. RLS decides *who* may write a row; this trigger decides
+-- whether the row itself is sane, so a hand-rolled API call cannot store garbage
+-- that the client form would have rejected. Keep the limits in sync with
+-- src/schemas/transaction.schema.ts.
+create or replace function public.transactions_validate()
+returns trigger
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  -- Never let a caller write rows on someone else's behalf, even by accident.
+  if new.user_id is null then
+    new.user_id := auth.uid();
+  end if;
+
+  if new.user_id <> auth.uid() then
+    raise exception 'user_id must match the authenticated user'
+      using errcode = '42501';
+  end if;
+
+  new.description := btrim(new.description);
+
+  if new.description is null or char_length(new.description) = 0 then
+    raise exception 'description must not be empty'
+      using errcode = '23514';
+  end if;
+
+  if char_length(new.description) > 120 then
+    raise exception 'description must be 120 characters or fewer'
+      using errcode = '23514';
+  end if;
+
+  -- Strip control characters that only ever arrive from a scripted client.
+  new.description := regexp_replace(new.description, '[\u0000-\u001f\u007f]', '', 'g');
+
+  if new.amount is null or new.amount <= 0 then
+    raise exception 'amount must be greater than 0'
+      using errcode = '23514';
+  end if;
+
+  if new.amount > 999999999 then
+    raise exception 'amount exceeds the allowed maximum'
+      using errcode = '23514';
+  end if;
+
+  new.amount := round(new.amount, 2);
+
+  if new.type not in ('income', 'expense') then
+    raise exception 'type must be income or expense'
+      using errcode = '23514';
+  end if;
+
+  if new.category is not null then
+    new.category := btrim(new.category);
+    if char_length(new.category) = 0 then
+      new.category := null;
+    elsif char_length(new.category) > 60 then
+      raise exception 'category must be 60 characters or fewer'
+        using errcode = '23514';
+    end if;
+  end if;
+
+  if new.transaction_date is null then
+    raise exception 'transaction_date is required'
+      using errcode = '23514';
+  end if;
+
+  -- Loose bounds on purpose: back-dating is a real use case, but a date centuries
+  -- away is always a bug or an abuse attempt.
+  if new.transaction_date < date '1970-01-01'
+     or new.transaction_date > (current_date + interval '1 year') then
+    raise exception 'transaction_date is out of the allowed range'
+      using errcode = '23514';
+  end if;
+
+  -- created_at is a server-owned audit field; ignore whatever the client sent.
+  if tg_op = 'INSERT' then
+    new.created_at := now();
+  else
+    new.created_at := old.created_at;
+    new.id := old.id;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists transactions_validate_trg on public.transactions;
+
+create trigger transactions_validate_trg
+before insert or update on public.transactions
+for each row execute function public.transactions_validate();
+
 -- Remove the retired monthly budget feature when upgrading an existing project.
 drop function if exists public.replace_monthly_budgets(date, jsonb);
 drop table if exists public.monthly_budgets;
@@ -125,3 +232,40 @@ using ((select auth.uid()) = user_id);
 
 create index if not exists user_achievements_user_id_idx
 on public.user_achievements (user_id);
+
+-- Same defence in depth as transactions: ownership and the timestamp are decided
+-- by the server, not by whatever the client happens to send.
+create or replace function public.user_achievements_validate()
+returns trigger
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  if new.user_id is null then
+    new.user_id := auth.uid();
+  end if;
+
+  if new.user_id <> auth.uid() then
+    raise exception 'user_id must match the authenticated user'
+      using errcode = '42501';
+  end if;
+
+  new.badge_id := btrim(new.badge_id);
+
+  if new.badge_id is null or char_length(new.badge_id) = 0 then
+    raise exception 'badge_id must not be empty'
+      using errcode = '23514';
+  end if;
+
+  new.unlocked_at := now();
+
+  return new;
+end;
+$$;
+
+drop trigger if exists user_achievements_validate_trg on public.user_achievements;
+
+create trigger user_achievements_validate_trg
+before insert on public.user_achievements
+for each row execute function public.user_achievements_validate();
