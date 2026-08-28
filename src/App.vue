@@ -703,8 +703,8 @@ onBeforeUnmount(() => {
           </button>
           <button class="settings-trigger" type="button" aria-label="เปิดการตั้งค่า" @click="settingsOpen = true">
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 8.7a3.3 3.3 0 1 0 0 6.6 3.3 3.3 0 0 0 0-6.6Z" />
-              <path d="M19.3 13.4c.1-.5.1-1 0-1.4l1.7-1.3-2-3.4-2 .8c-.4-.3-.8-.5-1.2-.7L15.5 5h-4l-.3 2.4c-.4.2-.8.4-1.2.7l-2-.8-2 3.4L7.7 12c-.1.5-.1 1 0 1.4L6 14.7l2 3.4 2-.8c.4.3.8.5 1.2.7l.3 2.4h4l.3-2.4c.4-.2.8-.4 1.2-.7l2 .8 2-3.4-1.7-1.3Z" />
+              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.09a2 2 0 0 1 1 1.74v.5a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+              <circle cx="12" cy="12" r="3" />
             </svg>
           </button>
         </div>
@@ -1205,31 +1205,41 @@ onBeforeUnmount(() => {
 
 .settings-trigger {
   display: grid;
+  box-sizing: border-box;
   width: 34px;
   height: 34px;
   flex: 0 0 34px;
   place-items: center;
+  padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.17);
   border-radius: 10px;
   color: rgba(255, 255, 255, 0.78);
   background: rgba(255, 255, 255, 0.07);
-  transition: color 0.2s, background 0.2s, transform 0.2s;
+  transition: color 0.2s, background 0.2s, border-color 0.2s;
 }
 
 .settings-trigger:hover {
   color: var(--green);
   background: var(--lime);
-  transform: rotate(12deg);
 }
 
 .settings-trigger svg {
-  width: 17px;
-  height: 17px;
+  display: block;
+  width: 18px;
+  height: 18px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.7;
   stroke-linecap: round;
   stroke-linejoin: round;
+  transform-origin: center;
+  transition: transform 0.2s ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .settings-trigger:hover svg {
+    transform: rotate(15deg);
+  }
 }
 
 .dashboard {
