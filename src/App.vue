@@ -1763,4 +1763,45 @@ onBeforeUnmount(() => {
   .demo-banner__icon { width: 32px; height: 32px; border-radius: 9px; }
   .demo-banner button { grid-column: 1 / -1; }
 }
+
+.app-shell {
+  min-height: 100dvh;
+}
+
+@media (display-mode: standalone) {
+  .auth-loading-page {
+    padding-top: max(24px, var(--safe-top));
+    padding-right: max(24px, var(--safe-right));
+    padding-bottom: max(24px, var(--safe-bottom));
+    padding-left: max(24px, var(--safe-left));
+  }
+
+  .topbar {
+    height: calc(62px + var(--safe-top));
+    padding-top: var(--safe-top);
+  }
+
+  .dashboard {
+    padding-right: var(--safe-right);
+    padding-bottom: calc(28px + var(--safe-bottom));
+    padding-left: var(--safe-left);
+  }
+
+  .undo-toast {
+    right: calc(22px + var(--safe-right));
+    bottom: calc(22px + var(--safe-bottom));
+  }
+}
+
+@media (display-mode: standalone) and (max-width: 580px) {
+  .topbar {
+    min-height: calc(58px + var(--safe-top));
+  }
+
+  .undo-toast {
+    right: calc(12px + var(--safe-right));
+    bottom: calc(12px + var(--safe-bottom));
+    left: calc(12px + var(--safe-left));
+  }
+}
 </style>

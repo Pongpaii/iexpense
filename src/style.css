@@ -803,3 +803,47 @@ code {
     gap: 7px;
   }
 }
+
+/* Installed PWA behavior and iPhone safe areas */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}
+
+body {
+  min-height: 100dvh;
+  -webkit-text-size-adjust: 100%;
+}
+
+button,
+a,
+input,
+select {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+@supports (-webkit-touch-callout: none) {
+  input:not([type='checkbox']):not([type='radio']),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+@media (display-mode: standalone) {
+  html,
+  body {
+    overscroll-behavior-y: none;
+  }
+
+  .toast {
+    bottom: calc(24px + var(--safe-bottom));
+  }
+
+  .footer {
+    padding-bottom: calc(34px + var(--safe-bottom));
+  }
+}
