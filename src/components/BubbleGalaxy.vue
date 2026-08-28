@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useTheme } from '../composables/useTheme'
 import type { Transaction, TransactionType } from '../types/transaction'
+import { categoryPalette, opiumCategoryPalette } from '../utils/categoryBreakdown'
 import {
   buildBubbleField,
   findBubbleAt,
@@ -15,6 +17,32 @@ import { buildSpendingHabits } from '../utils/spendingHabits'
 const props = defineProps<{
   transactions: Transaction[]
 }>()
+
+const { theme } = useTheme()
+const activePalette = computed(() =>
+  theme.value === 'opium' ? opiumCategoryPalette : categoryPalette,
+)
+const canvasPaint = computed(() =>
+  theme.value === 'opium'
+    ? {
+        cluster: 'rgba(242, 236, 232, 0.16)',
+        activeStroke: '#ff174f',
+        idleStroke: 'rgba(242, 236, 232, 0.34)',
+        highlight: 'rgba(255, 255, 255, 0.18)',
+        textStroke: 'rgba(7, 6, 7, 0.78)',
+        textFill: '#f2ece8',
+        countFill: 'rgba(242, 236, 232, 0.88)',
+      }
+    : {
+        cluster: 'rgba(35, 74, 57, 0.09)',
+        activeStroke: '#12301f',
+        idleStroke: 'rgba(255, 255, 255, 0.7)',
+        highlight: 'rgba(255, 255, 255, 0.34)',
+        textStroke: 'rgba(16, 43, 31, 0.45)',
+        textFill: '#ffffff',
+        countFill: 'rgba(255, 255, 255, 0.92)',
+      },
+)
 
 /** จำนวนฟองมากสุด กันเครื่องช้าและกันจอแน่น */
 const MAX_BUBBLES = 60
@@ -41,7 +69,9 @@ let resizeObserver: ResizeObserver | undefined
 let motionQuery: MediaQueryList | undefined
 const pointer: PointerState = { x: 0, y: 0, active: false }
 
-const summary = computed(() => buildSpendingHabits(props.transactions, activeType.value))
+const summary = computed(() =>
+  buildSpendingHabits(props.transactions, activeType.value, activePalette.value),
+)
 
 const visibleGroups = computed(() =>
   isolatedKey.value
@@ -75,13 +105,14 @@ const draw = () => {
   const context = element?.getContext('2d')
   if (!element || !context) return
 
+  const paint = canvasPaint.value
   const { width, height } = stageSize.value
   context.clearRect(0, 0, width, height)
   context.textAlign = 'center'
   context.textBaseline = 'middle'
 
   for (const label of labels) {
-    context.fillStyle = 'rgba(35, 74, 57, 0.09)'
+    context.fillStyle = paint.cluster
     context.font = "700 16px 'Noto Sans Thai', sans-serif"
     context.fillText(label.label, label.x, label.y)
   }
@@ -97,7 +128,7 @@ const draw = () => {
     context.fillStyle = bubble.color
     context.fill()
     context.lineWidth = isActive ? 3 : 1
-    context.strokeStyle = isActive ? '#12301f' : 'rgba(255, 255, 255, 0.7)'
+    context.strokeStyle = isActive ? paint.activeStroke : paint.idleStroke
     context.stroke()
 
     context.beginPath()
@@ -108,7 +139,7 @@ const draw = () => {
       0,
       Math.PI * 2,
     )
-    context.fillStyle = 'rgba(255, 255, 255, 0.34)'
+    context.fillStyle = paint.highlight
     context.fill()
 
     drawBubbleText(context, bubble)
@@ -119,6 +150,7 @@ const draw = () => {
 
 /** เขียนชื่อกลางฟอง พร้อมจำนวนครั้งไว้บรรทัดล่าง */
 const drawBubbleText = (context: CanvasRenderingContext2D, bubble: Bubble) => {
+  const paint = canvasPaint.value
   const lineHeight = bubble.fontSize * 1.2
   const countLabel = `×${bubble.count}`
   const blockHeight = bubble.lines.length * lineHeight + bubble.fontSize * 1.05
@@ -127,11 +159,11 @@ const drawBubbleText = (context: CanvasRenderingContext2D, bubble: Bubble) => {
   context.font = `700 ${bubble.fontSize}px 'Noto Sans Thai', sans-serif`
   context.lineJoin = 'round'
   context.lineWidth = 2.6
-  context.strokeStyle = 'rgba(16, 43, 31, 0.45)'
+  context.strokeStyle = paint.textStroke
 
   for (const line of bubble.lines) {
     context.strokeText(line, bubble.x, cursorY)
-    context.fillStyle = '#ffffff'
+    context.fillStyle = paint.textFill
     context.fillText(line, bubble.x, cursorY)
     cursorY += lineHeight
   }
@@ -139,7 +171,7 @@ const drawBubbleText = (context: CanvasRenderingContext2D, bubble: Bubble) => {
   context.font = `800 ${Math.round(bubble.fontSize * 0.92)}px 'Manrope', sans-serif`
   context.lineWidth = 2.4
   context.strokeText(countLabel, bubble.x, cursorY + 1)
-  context.fillStyle = 'rgba(255, 255, 255, 0.92)'
+  context.fillStyle = paint.countFill
   context.fillText(countLabel, bubble.x, cursorY + 1)
 }
 

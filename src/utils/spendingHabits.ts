@@ -50,6 +50,7 @@ const normalizeName = (value: string) => value.trim().replace(/\s+/g, ' ').toLow
 export const buildSpendingHabits = (
   transactions: Transaction[],
   type: TransactionType,
+  palette: readonly string[] = categoryPalette,
 ): SpendingHabitSummary => {
   const habits = new Map<string, SpendingHabit & { categoryKey: string }>()
   let transactionCount = 0
@@ -90,7 +91,7 @@ export const buildSpendingHabits = (
       key: habit.categoryKey,
       label: habit.category ?? 'ไม่ระบุหมวดหมู่',
       emoji: habit.category ? getCategoryEmoji(habit.category) : '🏷️',
-      color: '#398d67',
+      color: palette[0] ?? '#398d67',
       habits: [],
       count: 0,
       total: 0,
@@ -114,7 +115,7 @@ export const buildSpendingHabits = (
     .sort((left, right) => right.count - left.count || right.total - left.total)
     .map((group, index) => ({
       ...group,
-      color: categoryPalette[index % categoryPalette.length],
+      color: palette[index % palette.length],
       habits: group.habits.sort(
         (left, right) => right.count - left.count || right.total - left.total,
       ),
