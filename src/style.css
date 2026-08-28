@@ -454,6 +454,13 @@ code {
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
+.field input[type='date'] {
+  display: block;
+  inline-size: 100%;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
 .field input:focus {
   border-color: #5c8a77;
   box-shadow: 0 0 0 3px rgba(25, 77, 59, 0.08);
@@ -834,6 +841,12 @@ select {
   select,
   textarea {
     font-size: 16px !important;
+  }
+
+  .field input[type='date'] {
+    width: -webkit-fill-available;
+    inline-size: -webkit-fill-available;
+    -webkit-min-logical-width: 0;
   }
 }
 
