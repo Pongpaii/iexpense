@@ -135,7 +135,9 @@ const handleSubmit = () => {
 
         <label class="field">
           <span>วันที่</span>
-          <input v-model="form.transaction_date" type="date" required />
+          <span class="date-input-wrap">
+            <input v-model="form.transaction_date" type="date" required />
+          </span>
         </label>
 
         <div class="field field--wide">

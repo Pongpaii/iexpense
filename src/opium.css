@@ -295,6 +295,24 @@ html[data-theme='opium'] body :is(input, select, textarea):focus {
   box-shadow: 0 0 0 3px rgba(255,23,79,.12);
 }
 
+html[data-theme='opium'] body .date-input-wrap {
+  color: var(--opium-bone);
+  border-color: #3a2c32;
+  background-color: #110e11;
+}
+
+html[data-theme='opium'] body .date-input-wrap:focus-within {
+  border-color: var(--opium-hot);
+  box-shadow: 0 0 0 3px rgba(255,23,79,.12);
+}
+
+html[data-theme='opium'] body .date-input-wrap input,
+html[data-theme='opium'] body .date-input-wrap input:focus {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 html[data-theme='opium'] body input::placeholder { color: #71666b; }
 
 html[data-theme='opium'] body :is(.field, .cap-field, .salary-field, .reminder-time) { color: #b1a5aa; }
