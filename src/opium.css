@@ -1,0 +1,572 @@
+@import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=UnifrakturCook:wght@700&display=swap');
+
+/* The OPIUM palette is an original dark-vamp treatment, not artist branding. */
+.vamp-horns { display: none; }
+
+.setting-card.opium-card {
+  position: relative;
+  align-items: center;
+  margin-bottom: 12px;
+  overflow: hidden;
+  border-color: #46232f;
+  background:
+    linear-gradient(135deg, rgba(255,23,79,.09), transparent 42%),
+    linear-gradient(145deg, #171116, #080708);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.02);
+}
+
+.opium-card::after {
+  position: absolute;
+  right: -42px;
+  top: -58px;
+  width: 150px;
+  height: 150px;
+  border: 1px solid rgba(255,23,79,.16);
+  border-radius: 50%;
+  box-shadow: 0 0 0 24px rgba(255,23,79,.025), 0 0 0 48px rgba(255,23,79,.012);
+  content: '';
+  pointer-events: none;
+}
+
+.opium-sigil {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid #8d1735;
+  border-radius: 13px;
+  color: #fff;
+  background: linear-gradient(145deg, #b9002d, #2a0710);
+  box-shadow: 0 0 20px rgba(255,23,79,.2);
+}
+
+.opium-sigil span {
+  font-family: 'UnifrakturCook', Georgia, serif;
+  font-size: 1.65rem;
+  line-height: 1;
+  transform: translateY(-1px);
+}
+
+.opium-sigil::before,
+.opium-sigil::after {
+  position: absolute;
+  top: -7px;
+  width: 9px;
+  height: 14px;
+  border: 2px solid #ff174f;
+  border-bottom: 0;
+  content: '';
+}
+.opium-sigil::before { left: 6px; border-right: 0; transform: skew(-18deg) rotate(-18deg); }
+.opium-sigil::after { right: 6px; border-left: 0; transform: skew(18deg) rotate(18deg); }
+
+.opium-copy { position: relative; z-index: 1; }
+.opium-copy strong { color: #f2ece8 !important; font-family: 'Chakra Petch', sans-serif; letter-spacing: .08em; }
+.opium-copy p { color: #a99ca2 !important; }
+.opium-overline { color: #ff426d; font-family: 'Chakra Petch', sans-serif; font-size: .52rem; font-weight: 700; letter-spacing: .14em; }
+.opium-tags { display: flex; gap: 5px; margin-top: 7px; }
+.opium-tags span { padding: 3px 6px; border: 1px solid #3c2831; border-radius: 999px; color: #94868c; background: #0d0a0c; font-family: 'Chakra Petch', sans-serif; font-size: .46rem; font-weight: 700; letter-spacing: .1em; }
+
+.opium-toggle {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  color: #8f8388;
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: .52rem;
+  letter-spacing: .12em;
+  cursor: pointer;
+}
+.opium-toggle input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.opium-toggle__track { position: relative; width: 48px; height: 26px; border: 1px solid #4b3a42; border-radius: 999px; background: #211a1e; transition: .22s ease; }
+.opium-toggle__track i { position: absolute; top: 4px; left: 4px; width: 16px; height: 16px; border-radius: 50%; background: #8d7f85; box-shadow: 0 2px 6px rgba(0,0,0,.55); transition: .22s ease; }
+.opium-toggle input:checked + .opium-toggle__track { border-color: #ff174f; background: #690016; box-shadow: 0 0 18px rgba(255,23,79,.25); }
+.opium-toggle input:checked + .opium-toggle__track i { background: #fff; transform: translateX(22px); }
+.opium-toggle input:focus-visible + .opium-toggle__track { outline: 3px solid rgba(255,23,79,.2); outline-offset: 2px; }
+.opium-toggle input:disabled + .opium-toggle__track { opacity: .55; }
+.opium-toggle b { color: #c7bac0; font-size: .52rem; }
+.opium-card.is-active .opium-toggle b { color: #ff426d; }
+
+:root[data-theme='opium'] {
+  color: #f2ece8;
+  background: #070607;
+  color-scheme: dark;
+  --ink: #f2ece8;
+  --muted: #9c8f95;
+  --cream: #070607;
+  --paper: #100d10;
+  --green: #87001b;
+  --green-light: #21151a;
+  --lime: #ff174f;
+  --red: #ff174f;
+  --red-light: #2a1018;
+  --line: #34262d;
+  --shadow: 0 24px 70px rgba(0, 0, 0, 0.58), 0 0 38px rgba(176, 0, 40, 0.08);
+  --opium-void: #070607;
+  --opium-panel: #100d10;
+  --opium-raised: #171217;
+  --opium-control: #1d171c;
+  --opium-blood: #c4002f;
+  --opium-hot: #ff174f;
+  --opium-bone: #f2ece8;
+  --opium-smoke: #9c8f95;
+  --opium-metal: #5e5158;
+}
+
+html[data-theme='opium'] body {
+  color: var(--opium-bone);
+  background:
+    radial-gradient(circle at 78% 5%, rgba(196, 0, 47, 0.18), transparent 23rem),
+    radial-gradient(circle at 10% 62%, rgba(93, 0, 24, 0.12), transparent 26rem),
+    linear-gradient(150deg, #050405 0%, #0b080a 52%, #060506 100%);
+  font-family: 'Chakra Petch', 'Noto Sans Thai', system-ui, sans-serif;
+}
+
+html[data-theme='opium'] body::before {
+  position: fixed;
+  z-index: 9999;
+  inset: 0;
+  background:
+    repeating-linear-gradient(115deg, rgba(255,255,255,.018) 0 1px, transparent 1px 5px),
+    repeating-linear-gradient(0deg, rgba(255,23,79,.012) 0 1px, transparent 1px 3px);
+  content: '';
+  mix-blend-mode: screen;
+  opacity: .42;
+  pointer-events: none;
+}
+
+html[data-theme='opium'] ::selection {
+  color: #fff;
+  background: var(--opium-blood);
+}
+
+html[data-theme='opium'] body :is(h1, h2, h3, strong, button, input, select) {
+  letter-spacing: .015em;
+}
+
+html[data-theme='opium'] body .app-shell {
+  background:
+    linear-gradient(rgba(255,255,255,.012) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.012) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+html[data-theme='opium'] body .topbar {
+  border-bottom: 1px solid rgba(255, 23, 79, .55);
+  background: rgba(6, 5, 6, .94);
+  box-shadow: 0 12px 40px rgba(0,0,0,.62), 0 1px 24px rgba(196,0,47,.16);
+  backdrop-filter: blur(18px) saturate(125%);
+}
+
+html[data-theme='opium'] body .brand-mark {
+  color: var(--opium-bone);
+  border: 1px solid rgba(255, 23, 79, .7);
+  background: linear-gradient(145deg, #d60035, #550012);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.09), 0 0 20px rgba(255,23,79,.28);
+  font-size: 0;
+  transform: rotate(-3deg);
+}
+
+html[data-theme='opium'] body .brand-mark::after {
+  content: 'V';
+  font-family: 'UnifrakturCook', serif;
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+html[data-theme='opium'] body .brand > span:last-child {
+  font-family: 'UnifrakturCook', 'Noto Sans Thai', serif;
+  font-size: 1.28rem;
+  letter-spacing: .04em;
+  text-shadow: 0 0 18px rgba(255,23,79,.22);
+}
+
+html[data-theme='opium'] body :is(.connection-badge, .page-nav) {
+  border-color: rgba(255,255,255,.12);
+  background: rgba(255,255,255,.045);
+}
+
+html[data-theme='opium'] body .connection-dot {
+  background: var(--opium-hot);
+  box-shadow: 0 0 0 4px rgba(255,23,79,.12), 0 0 12px rgba(255,23,79,.55);
+}
+
+html[data-theme='opium'] body .page-nav button {
+  color: #8f8389;
+  text-transform: uppercase;
+}
+
+html[data-theme='opium'] body .page-nav button.active {
+  color: #fff;
+  background: linear-gradient(135deg, #d80038, #780018);
+  box-shadow: 0 4px 16px rgba(196,0,47,.35), inset 0 0 0 1px rgba(255,255,255,.1);
+}
+
+html[data-theme='opium'] body :is(.settings-trigger, .logout-button, .achievement-trigger) {
+  color: #c9bec3;
+  border-color: #34262d;
+  background: #151115;
+}
+
+html[data-theme='opium'] body :is(.settings-trigger, .logout-button, .achievement-trigger):hover {
+  color: #fff;
+  border-color: var(--opium-hot);
+  background: #710018;
+}
+
+html[data-theme='opium'] body :is(
+  .panel,
+  .summary-card,
+  .overview-panel,
+  .chart-panel,
+  .donut-card,
+  .analytics-card,
+  .heatmap-card,
+  .bubble-card,
+  .daily-cap-card,
+  .streak-pill,
+  .transaction-item,
+  .empty-state
+) {
+  color: var(--opium-bone);
+  border-color: var(--opium-line, #34262d);
+  background: linear-gradient(145deg, rgba(23,18,23,.98), rgba(12,10,12,.98));
+  box-shadow: var(--shadow);
+}
+
+html[data-theme='opium'] body :is(.panel, .summary-card, .transaction-item):hover {
+  border-color: rgba(255,23,79,.44);
+  box-shadow: 0 18px 42px rgba(0,0,0,.52), 0 0 26px rgba(196,0,47,.08);
+}
+
+html[data-theme='opium'] body :is(
+  .page-heading span,
+  .overview-title span,
+  .eyebrow,
+  .panel-heading p,
+  .summary-card > span,
+  .transaction-item small,
+  .empty-state p,
+  .footer,
+  .meter-zones,
+  .forecast-panel footer
+) {
+  color: var(--opium-smoke);
+}
+
+html[data-theme='opium'] body :is(.page-heading h1, .overview-title h1, .panel-heading h2) {
+  color: var(--opium-bone);
+}
+
+html[data-theme='opium'] body :is(.page-heading h1, .overview-title h1, .buddy-copy h2) {
+  font-family: 'Chakra Petch', 'Noto Sans Thai', sans-serif;
+  font-weight: 700;
+}
+
+html[data-theme='opium'] body :is(.day-navigation, .overview-tabs, .month-picker, .type-switch, .cap-kind-tabs) {
+  border-color: #30242a;
+  background: #100d10;
+}
+
+html[data-theme='opium'] body :is(.day-navigation button, .overview-tabs button, .type-switch label) {
+  color: #a99ca2;
+}
+
+html[data-theme='opium'] body :is(.overview-tabs button.active, .type-switch label:has(input:checked)) {
+  color: #fff;
+  background: #8d001d;
+  box-shadow: 0 4px 16px rgba(196,0,47,.24);
+}
+
+html[data-theme='opium'] body :is(input, select, textarea, .month-picker input) {
+  color: var(--opium-bone);
+  border-color: #3a2c32;
+  background-color: #110e11;
+  caret-color: var(--opium-hot);
+  color-scheme: dark;
+}
+
+html[data-theme='opium'] body :is(input, select, textarea):focus {
+  border-color: var(--opium-hot);
+  box-shadow: 0 0 0 3px rgba(255,23,79,.12);
+}
+
+html[data-theme='opium'] body input::placeholder { color: #71666b; }
+
+html[data-theme='opium'] body :is(.field, .cap-field, .salary-field, .reminder-time) { color: #b1a5aa; }
+
+html[data-theme='opium'] body :is(.primary-button, .setting-button, .export-button) {
+  color: #fff;
+  border-color: #a90028;
+  background: linear-gradient(135deg, #d50035, #720016);
+  box-shadow: 0 8px 22px rgba(153,0,32,.24);
+}
+
+html[data-theme='opium'] body :is(.primary-button, .setting-button, .export-button):hover:not(:disabled) {
+  color: #fff;
+  border-color: var(--opium-hot);
+  background: linear-gradient(135deg, #f00040, #940020);
+}
+
+html[data-theme='opium'] body :is(.transaction-icon, .summary-icon, .setting-icon) {
+  color: #fff;
+  background: linear-gradient(145deg, #8d001d, #2d0912);
+}
+
+html[data-theme='opium'] body :is(.income, .summary-card--income, .bar--income) {
+  --state-color: #d9d0d4;
+}
+
+html[data-theme='opium'] body :is(.expense, .summary-card--expense, .bar--expense) {
+  --state-color: var(--opium-hot);
+}
+
+html[data-theme='opium'] body .summary-card--balance {
+  border-color: #4a303a;
+  background: linear-gradient(140deg, #1a1116, #080708 70%);
+}
+
+html[data-theme='opium'] body .summary-card--balance::after {
+  border-color: rgba(255,23,79,.15);
+  box-shadow: 0 0 0 46px rgba(255,23,79,.025), 0 0 0 92px rgba(255,23,79,.015);
+}
+
+html[data-theme='opium'] body :is(.modal-backdrop, .edit-backdrop, .gallery-backdrop) {
+  background: rgba(2,1,2,.82);
+  backdrop-filter: blur(12px) saturate(75%);
+}
+
+html[data-theme='opium'] body :is(.settings-modal, .edit-dialog, .gallery-dialog) {
+  color: var(--opium-bone);
+  border-color: #4b303b;
+  background: linear-gradient(160deg, #161116, #090709);
+  box-shadow: 0 35px 100px rgba(0,0,0,.8), 0 0 54px rgba(196,0,47,.1);
+}
+
+html[data-theme='opium'] body :is(.settings-header, .edit-header, .gallery-header) {
+  border-color: #33242b;
+  background: rgba(9,7,9,.84);
+}
+
+html[data-theme='opium'] body :is(.settings-header h2, .edit-header h2, .gallery-header h2, .setting-copy strong) {
+  color: var(--opium-bone);
+}
+
+html[data-theme='opium'] body :is(.close-button, .edit-close, .gallery-close) {
+  color: #d6cbd0;
+  background: #20181e;
+}
+
+html[data-theme='opium'] body :is(.setting-card, .salary-card, .cap-card, .reminder-card, .setting-card--danger) {
+  color: var(--opium-bone);
+  border-color: #3b2931;
+  background: linear-gradient(135deg, rgba(26,20,25,.96), rgba(13,10,12,.96));
+}
+
+html[data-theme='opium'] body :is(
+  .salary-input-wrap,
+  .cap-input-wrap,
+  .cap-plan-editor,
+  .cap-plan-item,
+  .cap-plan-row input,
+  .cap-plan-match input,
+  .cap-plan-match select,
+  .cap-plan-time input,
+  .reminder-time input,
+  .forecast-panel,
+  .forecast-metrics article,
+  .speech
+) {
+  color: var(--opium-bone);
+  border-color: #3c2c33;
+  background: rgba(13,10,12,.9);
+}
+
+html[data-theme='opium'] body :is(.setting-copy p, .setting-copy small, .danger-heading p, .cap-plan-note) {
+  color: var(--opium-smoke) !important;
+}
+
+html[data-theme='opium'] body :is(.cap-toggle > span, .reminder-toggle > span) { background: #3d3338; }
+html[data-theme='opium'] body :is(.cap-toggle input:checked + span, .reminder-toggle input:checked + span) {
+  background: var(--opium-hot);
+  box-shadow: 0 0 14px rgba(255,23,79,.35);
+}
+
+html[data-theme='opium'] body .danger-zone { border-color: #44232e; }
+html[data-theme='opium'] body .reset-confirm {
+  color: #ffc3d1;
+  border-color: #6c2035;
+  background: #220b13;
+}
+
+html[data-theme='opium'] body .toast,
+html[data-theme='opium'] body .undo-toast,
+html[data-theme='opium'] body .badge-toast {
+  color: #fff;
+  border-color: #652035;
+  background: linear-gradient(135deg, #250912, #080708);
+  box-shadow: 0 18px 55px rgba(0,0,0,.68), 0 0 30px rgba(255,23,79,.14);
+}
+
+html[data-theme='opium'] body .heatmap-cell--level-0 { background: #151115; }
+html[data-theme='opium'] body .heatmap-cell--level-1 { background: #2b1820; }
+html[data-theme='opium'] body .heatmap-cell--level-2 { background: #501426; }
+html[data-theme='opium'] body .heatmap-cell--level-3 { background: #7d0b28; }
+html[data-theme='opium'] body .heatmap-cell--level-4 { background: #b30032; }
+html[data-theme='opium'] body .heatmap-cell--level-5 { background: #f20b48; }
+html[data-theme='opium'] body .heatmap-cell--today { outline-color: #f4e8ec; }
+
+html[data-theme='opium'] body :is(.grid-lines i, .axis-line) { border-color: #2d2429; }
+html[data-theme='opium'] body .bar--income { background: linear-gradient(#ded4d8, #807279); }
+html[data-theme='opium'] body .bar--expense { background: linear-gradient(#ff315f, #8c001f); }
+html[data-theme='opium'] body :is(.donut-track, .bubble-stage) {
+  border-color: #31242b;
+  background: #0b090b;
+}
+
+html[data-theme='opium'] body .buddy-card {
+  color: var(--opium-bone);
+  border-color: #4b2937;
+  background:
+    radial-gradient(circle at 82% 20%, rgba(255,23,79,.16), transparent 18rem),
+    linear-gradient(125deg, #171116, #080708 68%, #11060b);
+  box-shadow: 0 24px 70px rgba(0,0,0,.58), inset 0 0 0 1px rgba(255,255,255,.018);
+}
+
+html[data-theme='opium'] body .buddy-card::after {
+  border-color: rgba(255,23,79,.16);
+  box-shadow: 0 0 0 55px rgba(255,23,79,.025), 0 0 0 110px rgba(255,23,79,.015);
+}
+
+html[data-theme='opium'] body :is(.buddy-kicker, .mood-badge, .buddy-copy h2 small) {
+  color: #ff7697;
+  background: rgba(255,23,79,.1);
+}
+
+html[data-theme='opium'] body .mood-badge i {
+  background: var(--opium-hot);
+  box-shadow: 0 0 10px var(--opium-hot);
+}
+
+html[data-theme='opium'] body .speech::after {
+  border-color: #3c2c33;
+  background: #0d0a0c;
+}
+
+html[data-theme='opium'] body .meter-track {
+  background: linear-gradient(90deg, #272026 0 50%, #4d1d2a 50% 80%, #791029 80%);
+}
+
+html[data-theme='opium'] body .meter-track > span {
+  background: linear-gradient(90deg, #8d001d, #ff174f);
+  box-shadow: 0 0 14px rgba(255,23,79,.4);
+}
+
+html[data-theme='opium'] body .forecast-advice {
+  color: #d8ccd1;
+  border-left-color: var(--opium-hot);
+  background: #1d1016;
+}
+
+html[data-theme='opium'] body .buddy-button {
+  filter: drop-shadow(0 18px 18px rgba(0,0,0,.55)) drop-shadow(0 0 16px rgba(255,23,79,.18));
+}
+
+html[data-theme='opium'] body .vamp-horns { display: block; }
+html[data-theme='opium'] body .horn {
+  fill: #090709;
+  stroke: #ff174f;
+  stroke-width: 4;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 5px rgba(255,23,79,.65));
+}
+html[data-theme='opium'] body .buddy .knot { fill: #2a1018; stroke: #a50028; }
+html[data-theme='opium'] body .buddy .tie { fill: #c4002f; stroke: #ff174f; }
+html[data-theme='opium'] body .buddy .body { fill: #171217; stroke: #b8002d; }
+html[data-theme='opium'] body .buddy .belly { fill: #3b1522; opacity: .9; }
+html[data-theme='opium'] body .buddy .arm { stroke: #b8002d; }
+html[data-theme='opium'] body .buddy :is(.eye, .mouth-fill) { fill: #ff174f; }
+html[data-theme='opium'] body .buddy :is(.eye-line, .mouth-line, .brow) { stroke: #ff174f; }
+html[data-theme='opium'] body .buddy .cheek { fill: #8d001d; }
+html[data-theme='opium'] body .buddy .baht {
+  fill: #f2ece8;
+  font-family: 'UnifrakturCook', serif;
+  text-shadow: 0 0 12px rgba(255,255,255,.35);
+}
+
+html[data-theme='opium'] body .opium-card {
+  border-color: #5d2032;
+  background:
+    linear-gradient(135deg, rgba(255,23,79,.08), transparent 45%),
+    linear-gradient(145deg, #171116, #090709);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.02), 0 12px 36px rgba(0,0,0,.28);
+}
+
+html[data-theme='opium'] body .opium-card.is-active {
+  border-color: var(--opium-hot);
+  box-shadow: 0 0 0 1px rgba(255,23,79,.2), 0 0 32px rgba(255,23,79,.12);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html[data-theme='opium'] body .brand-mark { animation: opium-pulse 3.8s ease-in-out infinite; }
+  html[data-theme='opium'] body .horn--left { animation: horn-left 4s ease-in-out infinite; transform-origin: 86px 54px; }
+  html[data-theme='opium'] body .horn--right { animation: horn-right 4s ease-in-out infinite; transform-origin: 132px 54px; }
+}
+
+@keyframes opium-pulse {
+  0%, 100% { box-shadow: inset 0 0 0 1px rgba(255,255,255,.09), 0 0 14px rgba(255,23,79,.2); }
+  50% { box-shadow: inset 0 0 0 1px rgba(255,255,255,.13), 0 0 28px rgba(255,23,79,.42); }
+}
+
+@keyframes horn-left { 0%,100% { transform: rotate(0); } 50% { transform: rotate(-2deg); } }
+@keyframes horn-right { 0%,100% { transform: rotate(0); } 50% { transform: rotate(2deg); } }
+
+@media (max-width: 580px) {
+  html[data-theme='opium'] body .brand-mark { transform: rotate(-2deg) scale(.96); }
+  html[data-theme='opium'] body .settings-modal { border-bottom: 0; }
+}
+
+html[data-theme='opium'] body :is(.auth-page, .reset-page, .auth-loading-page) {
+  color: var(--opium-bone);
+  background:
+    radial-gradient(circle at 78% 15%, rgba(196,0,47,.2), transparent 20rem),
+    linear-gradient(145deg, #050405, #10080c 58%, #070607);
+}
+
+html[data-theme='opium'] body :is(.auth-card, .reset-card, .auth-loading-card) {
+  color: var(--opium-bone);
+  border-color: #4b303b;
+  background: rgba(16,13,16,.94);
+  box-shadow: 0 28px 90px rgba(0,0,0,.7), 0 0 40px rgba(196,0,47,.08);
+}
+
+html[data-theme='opium'] body :is(.auth-card h1, .auth-card h2, .reset-card h1, .reset-card h2) {
+  color: var(--opium-bone);
+  font-family: 'Chakra Petch', 'Noto Sans Thai', sans-serif;
+}
+
+html[data-theme='opium'] body :is(.auth-card p, .reset-card p, .auth-helper) { color: var(--opium-smoke); }
+
+html[data-theme='opium'] body .hero {
+  color: #fff;
+  background:
+    radial-gradient(circle at 84% 25%, rgba(255,23,79,.16), transparent 18rem),
+    linear-gradient(115deg, #050405, #16090e 70%, #080607);
+}
+
+@media (max-width: 580px) {
+  .opium-toggle {
+    grid-column: 1 / -1;
+    grid-template-columns: auto auto;
+    grid-auto-flow: column;
+    align-items: center;
+    justify-content: end;
+    justify-items: end;
+  }
+
+  .opium-toggle b { min-width: 24px; }
+}

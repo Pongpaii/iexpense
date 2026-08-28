@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useDailyReminder } from '../composables/useDailyReminder'
 import { useSalarySettings } from '../composables/useSalarySettings'
+import { useTheme } from '../composables/useTheme'
 import {
   createPlanItemId,
   dayKindEmojis,
@@ -40,6 +41,13 @@ const {
   saveMonthlySalary,
   toggleSalaryVisibility,
 } = useSalarySettings()
+const { theme, setTheme } = useTheme()
+const opiumEnabled = computed({
+  get: () => theme.value === 'opium',
+  set: (enabled: boolean) => {
+    setTheme(enabled ? 'opium' : 'default')
+  },
+})
 const {
   reminderEnabled,
   reminderTime,
@@ -335,6 +343,23 @@ onBeforeUnmount(() => {
           </header>
 
           <div class="settings-body">
+            <article class="setting-card opium-card" :class="{ 'is-active': opiumEnabled }">
+              <div class="opium-sigil" aria-hidden="true"><span>V</span></div>
+              <div class="setting-copy opium-copy">
+                <span class="opium-overline">APPEARANCE / VAMP SYSTEM</span>
+                <strong>OPIUM MODE</strong>
+                <p>สลับทั้งแอปเป็นโทน void black, blood red และ bone พร้อมมาสคอตเขา devil-vamp</p>
+                <div class="opium-tags" aria-hidden="true">
+                  <span>VOID</span><span>BLOOD</span><span>VAMP</span>
+                </div>
+              </div>
+              <label class="opium-toggle">
+                <input v-model="opiumEnabled" type="checkbox" aria-label="เปิดหรือปิด OPIUM MODE" :disabled="busy" />
+                <span class="opium-toggle__track" aria-hidden="true"><i></i></span>
+                <b>{{ opiumEnabled ? 'ON' : 'OFF' }}</b>
+              </label>
+            </article>
+
             <form class="setting-card salary-card" @submit.prevent="submitSalary">
               <div class="setting-icon setting-icon--salary" aria-hidden="true">฿</div>
               <div class="setting-copy salary-copy">

@@ -6,6 +6,15 @@
     <meta name="description" content="เว็บบันทึกรายรับและรายจ่ายส่วนตัว" />
     <meta name="application-name" content="Money Flow" />
     <meta name="theme-color" content="#194d3b" />
+    <script>
+      try {
+        if (localStorage.getItem('money-flow.theme.v1') === 'opium') {
+          document.documentElement.dataset.theme = 'opium'
+          document.documentElement.style.colorScheme = 'dark'
+          document.querySelector('meta[name="theme-color"]').content = '#070607'
+        }
+      } catch {}
+    </script>
     <meta name="format-detection" content="telephone=no" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
