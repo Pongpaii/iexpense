@@ -1,4 +1,5 @@
 {
+  "id": "/",
   "name": "Money Flow - บันทึกรายรับรายจ่าย",
   "short_name": "Money Flow",
   "description": "แอปบันทึกรายรับและรายจ่ายส่วนตัวภาษาไทย",
@@ -11,15 +12,24 @@
   "theme_color": "#194d3b",
   "icons": [
     {
-      "src": "/icons/money-flow.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
+      "src": "/icons/pwa-64x64.png",
+      "sizes": "64x64",
+      "type": "image/png"
     },
     {
-      "src": "/icons/money-flow-maskable.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "/icons/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/maskable-icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "maskable"
     }
   ]
