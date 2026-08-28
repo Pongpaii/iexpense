@@ -1795,7 +1795,12 @@ onBeforeUnmount(() => {
 
 @media (display-mode: standalone) and (max-width: 580px) {
   .topbar {
+    height: auto;
     min-height: calc(58px + var(--safe-top));
+  }
+
+  .navbar {
+    height: auto;
   }
 
   .undo-toast {
