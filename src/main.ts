@@ -1,8 +1,13 @@
 import { createApp, h } from 'vue'
 import App from './App.vue'
 import ErrorBoundary from './components/ErrorBoundary.vue'
+import { initializeTheme } from './composables/useTheme'
 import { initMonitoring, reportError } from './lib/monitoring'
 import './style.css'
+import './opium.css'
+
+// Apply the persisted theme before Vue renders to avoid a flash of the default theme.
+initializeTheme()
 
 // ครอบ App ด้วย ErrorBoundary ที่ระดับ root: ถ้า component ไหนพังกลางทาง
 // ผู้ใช้จะเห็นการ์ดบอกวิธีแก้ ไม่ใช่หน้าจอขาวเปล่า ๆ

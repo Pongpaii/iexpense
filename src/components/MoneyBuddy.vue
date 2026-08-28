@@ -265,6 +265,10 @@ onBeforeUnmount(() => {
 
       <svg class="buddy" viewBox="0 0 220 220" role="img" :aria-label="`น้องถุงเงินกำลัง${statusLabel}`">
         <path class="shadow" d="M43 193c0-13 31-23 69-23s68 10 68 23-30 18-68 18-69-5-69-18Z" />
+        <g class="vamp-horns" aria-hidden="true">
+          <path class="horn horn--left" d="M88 56C69 50 60 34 65 11c5 12 14 20 29 23l-6 22Z" />
+          <path class="horn horn--right" d="M130 56c19-6 28-22 23-45-5 12-14 20-29 23l6 22Z" />
+        </g>
         <path class="knot" d="M75 52c7-11 13-20 14-34 12 6 22 6 35 0 2 13 9 24 18 34-18 12-48 11-67 0Z" />
         <path class="tie" d="M70 50c17-9 57-9 75 0l-8 17c-18-7-42-7-59 0L70 50Z" />
         <path class="body" d="M77 61c18-9 43-9 61 0 15 20 38 50 38 84 0 39-27 59-68 59s-67-20-67-59c0-34 22-64 36-84Z" />

@@ -16,6 +16,17 @@ export const categoryPalette = [
   '#c77794',
 ]
 
+export const opiumCategoryPalette = [
+  '#ff174f',
+  '#c4002f',
+  '#ff5a7e',
+  '#8d1735',
+  '#f2ece8',
+  '#9c8f95',
+  '#6c2035',
+  '#d9d0d4',
+]
+
 export interface CategorySlice {
   key: string
   category: TransactionCategory | null
@@ -40,6 +51,7 @@ const UNCATEGORIZED_KEY = '__uncategorized__'
 export const buildCategoryBreakdown = (
   transactions: Transaction[],
   type: TransactionType,
+  palette: readonly string[] = categoryPalette,
 ): CategoryBreakdown => {
   const groups = new Map<string, { category: TransactionCategory | null; amount: number; items: Transaction[] }>()
   let total = 0
@@ -66,7 +78,7 @@ export const buildCategoryBreakdown = (
       emoji: group.category ? getCategoryEmoji(group.category) : '🏷️',
       amount: group.amount,
       percentage: total > 0 ? (group.amount / total) * 100 : 0,
-      color: categoryPalette[index % categoryPalette.length],
+      color: palette[index % palette.length],
       items: [...group.items].sort((a, b) => {
         const byAmount = Number(b.amount) - Number(a.amount)
         return byAmount !== 0 ? byAmount : b.transaction_date.localeCompare(a.transaction_date)

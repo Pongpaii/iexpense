@@ -187,14 +187,19 @@ onBeforeUnmount(() => clearTimeout(unlockTimer))
 
         <label class="field">
           <span>วันที่</span>
-          <input
-            v-model="form.transaction_date"
-            type="date"
-            required
-            :aria-invalid="Boolean(fieldErrors.transaction_date)"
-            :aria-describedby="fieldErrors.transaction_date ? 'form-error-date' : undefined"
-            @input="clearFieldError('transaction_date')"
-          />
+          <span
+            class="date-input-wrap"
+            :class="{ 'date-input-wrap--invalid': Boolean(fieldErrors.transaction_date) }"
+          >
+            <input
+              v-model="form.transaction_date"
+              type="date"
+              required
+              :aria-invalid="Boolean(fieldErrors.transaction_date)"
+              :aria-describedby="fieldErrors.transaction_date ? 'form-error-date' : undefined"
+              @input="clearFieldError('transaction_date')"
+            />
+          </span>
           <small v-if="fieldErrors.transaction_date" id="form-error-date" class="field-error" role="alert">
             {{ fieldErrors.transaction_date }}
           </small>

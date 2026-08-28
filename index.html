@@ -2,14 +2,23 @@
 <html lang="th">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="description" content="เว็บบันทึกรายรับและรายจ่ายส่วนตัว" />
     <meta name="application-name" content="Money Flow" />
     <meta name="theme-color" content="#194d3b" />
+    <script>
+      try {
+        if (localStorage.getItem('money-flow.theme.v1') === 'opium') {
+          document.documentElement.dataset.theme = 'opium'
+          document.documentElement.style.colorScheme = 'dark'
+          document.querySelector('meta[name="theme-color"]').content = '#070607'
+        }
+      } catch {}
+    </script>
     <meta name="format-detection" content="telephone=no" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Money Flow" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icons/favicon.ico" sizes="any" />

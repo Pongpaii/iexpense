@@ -526,8 +526,8 @@ onMounted(() => void auth.initialize())
           </button>
           <button class="settings-trigger" type="button" aria-label="เปิดการตั้งค่า" @click="settingsOpen = true">
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 8.7a3.3 3.3 0 1 0 0 6.6 3.3 3.3 0 0 0 0-6.6Z" />
-              <path d="M19.3 13.4c.1-.5.1-1 0-1.4l1.7-1.3-2-3.4-2 .8c-.4-.3-.8-.5-1.2-.7L15.5 5h-4l-.3 2.4c-.4.2-.8.4-1.2.7l-2-.8-2 3.4L7.7 12c-.1.5-.1 1 0 1.4L6 14.7l2 3.4 2-.8c.4.3.8.5 1.2.7l.3 2.4h4l.3-2.4c.4-.2.8-.4 1.2-.7l2 .8 2-3.4-1.7-1.3Z" />
+              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.09a2 2 0 0 1 1 1.74v.5a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+              <circle cx="12" cy="12" r="3" />
             </svg>
           </button>
         </div>
@@ -1218,31 +1218,41 @@ onMounted(() => void auth.initialize())
 
 .settings-trigger {
   display: grid;
+  box-sizing: border-box;
   width: 34px;
   height: 34px;
   flex: 0 0 34px;
   place-items: center;
+  padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.17);
   border-radius: 10px;
   color: rgba(255, 255, 255, 0.78);
   background: rgba(255, 255, 255, 0.07);
-  transition: color 0.2s, background 0.2s, transform 0.2s;
+  transition: color 0.2s, background 0.2s, border-color 0.2s;
 }
 
 .settings-trigger:hover {
   color: var(--green);
   background: var(--lime);
-  transform: rotate(12deg);
 }
 
 .settings-trigger svg {
-  width: 17px;
-  height: 17px;
+  display: block;
+  width: 18px;
+  height: 18px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.7;
   stroke-linecap: round;
   stroke-linejoin: round;
+  transform-origin: center;
+  transition: transform 0.2s ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .settings-trigger:hover svg {
+    transform: rotate(15deg);
+  }
 }
 
 .dashboard {
@@ -1775,5 +1785,51 @@ onMounted(() => void auth.initialize())
   .demo-banner { grid-template-columns: 32px minmax(0, 1fr); }
   .demo-banner__icon { width: 32px; height: 32px; border-radius: 9px; }
   .demo-banner button { grid-column: 1 / -1; }
+}
+
+.app-shell {
+  min-height: 100dvh;
+}
+
+@media (display-mode: standalone) {
+  .auth-loading-page {
+    padding-top: max(24px, var(--safe-top));
+    padding-right: max(24px, var(--safe-right));
+    padding-bottom: max(24px, var(--safe-bottom));
+    padding-left: max(24px, var(--safe-left));
+  }
+
+  .topbar {
+    height: calc(62px + var(--safe-top));
+    padding-top: var(--safe-top);
+  }
+
+  .dashboard {
+    padding-right: var(--safe-right);
+    padding-bottom: calc(28px + var(--safe-bottom));
+    padding-left: var(--safe-left);
+  }
+
+  .undo-toast {
+    right: calc(22px + var(--safe-right));
+    bottom: calc(22px + var(--safe-bottom));
+  }
+}
+
+@media (display-mode: standalone) and (max-width: 580px) {
+  .topbar {
+    height: auto;
+    min-height: calc(58px + var(--safe-top));
+  }
+
+  .navbar {
+    height: auto;
+  }
+
+  .undo-toast {
+    right: calc(12px + var(--safe-right));
+    bottom: calc(12px + var(--safe-bottom));
+    left: calc(12px + var(--safe-left));
+  }
 }
 </style>
