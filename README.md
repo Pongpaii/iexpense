@@ -1,14 +1,56 @@
-# คู่มือติดตั้ง Money Flow (iexpense)
+# Money Flow (iExpense)
 
-แอปบันทึกรายรับรายจ่ายภาษาไทย สร้างด้วย Vue 3 + TypeScript + Vite และใช้ Supabase เป็นฐานข้อมูล/ระบบล็อกอิน
+แอปบันทึกรายรับ–รายจ่ายภาษาไทยสำหรับเว็บ, PWA และ Android สร้างด้วย Vue 3, TypeScript, Vite, Supabase และ Capacitor
 
-## 1. สิ่งที่ต้องมีก่อน
+Money Flow รองรับการล็อกอิน, การวิเคราะห์ค่าใช้จ่าย, การทำงานขณะออฟไลน์, การแจ้งเตือนรายวัน, ธีม OPIUM และโหมด Demo ที่ทดลองใช้ได้โดยไม่ต้องมีฐานข้อมูล
 
-| อย่าง | เวอร์ชันที่แนะนำ | หมายเหตุ |
-| --- | --- | --- |
-| Node.js | 22.12+ หรือ 24 LTS | Vite 8 ต้องใช้ Node ≥ 20.19 |
-| npm | มาพร้อม Node | หรือใช้ pnpm / yarn ก็ได้ |
-| บัญชี Supabase | – | จำเป็นเฉพาะเมื่อต้องการใช้งานจริง (บันทึกข้อมูล) |
+## ความสามารถหลัก
+
+- บันทึก แก้ไข ลบ และเลือกลบธุรกรรมหลายรายการ
+- สรุปยอดคงเหลือ รายรับ และรายจ่าย
+- กราฟกระแสเงินสด, สัดส่วนหมวดหมู่, Heatmap และ Bubble Galaxy
+- วิเคราะห์พฤติกรรมการใช้จ่ายและคาดการณ์เงินคงเหลือ
+- ตั้งค่าเงินเดือน, เพดานรายวัน และการแจ้งเตือน
+- ระบบ achievement และ streak
+- ธีมปกติและธีม OPIUM ที่จำค่าบนอุปกรณ์
+- PWA พร้อม install prompt และ service worker แบบ auto-update
+- Android app ผ่าน Capacitor พร้อม GitHub Actions สำหรับสร้าง APK
+- โหมด Demo แบบอ่านอย่างเดียว ไม่เรียก Supabase
+
+## Production capabilities
+
+- ตรวจข้อมูลด้วย Zod ทั้งในฟอร์มและก่อนส่ง API
+- Database constraints, validation triggers และ Row Level Security
+- API timeout และ retry แบบ exponential backoff สำหรับข้อผิดพลาดชั่วคราว
+- ตรวจจับ session หมดอายุและลอง refresh ก่อนบังคับให้เข้าสู่ระบบใหม่
+- Offline queue สำหรับ transaction ใหม่ พร้อมซิงก์อัตโนมัติเมื่อออนไลน์
+- Error Boundary, global error handlers และ optional Sentry monitoring
+- Lazy-loaded analytics components และ Skeleton loading
+- ดึง transaction จาก Supabase เป็นช่วงและแสดงรายการครั้งละ 50 แถว
+- Security headers และ cache policy สำหรับ Vercel/Netlify
+- CI ตรวจ TypeScript, ESLint, 319 tests และ production build
+
+## เทคโนโลยี
+
+| ส่วน       | เทคโนโลยี                                     |
+| ---------- | --------------------------------------------- |
+| Frontend   | Vue 3, TypeScript, Vite                       |
+| Validation | Zod                                           |
+| Backend    | Supabase Auth, PostgreSQL, Row Level Security |
+| Mobile     | Capacitor Android/iOS                         |
+| PWA        | vite-plugin-pwa, Workbox                      |
+| Testing    | Vitest, Vue Test Utils, Happy DOM             |
+| Monitoring | Sentry (เลือกเปิดใช้ได้)                      |
+| CI/CD      | GitHub Actions, Vercel, Netlify               |
+
+## สิ่งที่ต้องมี
+
+| เครื่องมือ             | เวอร์ชัน/หมายเหตุ                              |
+| ---------------------- | ---------------------------------------------- |
+| Node.js                | 22.12+ หรือ 24 LTS; Vite 8 ต้องการ Node 20.19+ |
+| npm                    | ติดตั้งมากับ Node.js                           |
+| Supabase project       | จำเป็นสำหรับการล็อกอินและบันทึกข้อมูลจริง      |
+| Android Studio/JDK/SDK | จำเป็นเฉพาะเมื่อ build Android ในเครื่อง       |
 
 ตรวจเวอร์ชัน:
 
@@ -17,72 +59,115 @@ node -v
 npm -v
 ```
 
-> อยากลองดูหน้าตาแอปก่อนโดยไม่ตั้งค่า Supabase ก็ได้ — ที่หน้าเข้าสู่ระบบมีปุ่ม **เข้าดูตัวอย่างแอป (Demo)** ซึ่งใช้ข้อมูลสมมติในหน่วยความจำ ดูได้อย่างเดียว ไม่ต้องมีฐานข้อมูล
-
-## 2. ติดตั้งโปรเจกต์
+## ติดตั้งโปรเจกต์
 
 ```powershell
-git clone <URL ของ repo นี้>
+git clone <REPOSITORY_URL>
 cd iexpense
 npm install
 ```
 
-## 3. ตั้งค่า Environment Variables
+สำหรับ CI หรือการติดตั้งตาม `package-lock.json` แบบแน่นอน:
 
-คัดลอกไฟล์ตัวอย่างแล้วเติมค่าจริง:
+```powershell
+npm ci
+```
+
+ถ้า PowerShell บล็อก `npm.ps1` ให้เรียกผ่าน `cmd`:
+
+```powershell
+cmd /c "npm install"
+```
+
+## Environment variables
+
+คัดลอกไฟล์ตัวอย่าง:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-`.env` ต้องมีสองค่านี้ (หาได้จาก Supabase Dashboard → Project Settings → API):
+ค่าที่จำเป็น:
 
 ```env
 VITE_SUPABASE_URL=https://YOUR_PROJECT_ID.supabase.co
 VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
 ```
 
-ข้อควรรู้
-- ใช้ **anon public key** เท่านั้น ห้ามใส่ service role key เพราะไฟล์นี้ถูก bundle ไปฝั่งเบราว์เซอร์
-- `.env` ถูก ignore ไว้ใน git แล้ว
-- ถ้าไม่ใส่ค่า แอปจะยังเปิดได้แต่จะขึ้นข้อความว่ายังไม่ได้เชื่อมฐานข้อมูล และใช้ได้แค่โหมด Demo
+ค่าที่เลือกเปิดใช้ได้:
 
-## 4. เตรียมฐานข้อมูล Supabase
+```env
+VITE_SENTRY_DSN=
+VITE_SENTRY_TRACES_SAMPLE_RATE=0.1
+VITE_APP_ENV=development
+```
 
-1. สร้างโปรเจกต์ใหม่ใน [Supabase](https://supabase.com/dashboard)
-2. เปิด **SQL Editor** แล้ววางเนื้อหาทั้งไฟล์ `supabase/schema.sql` และกด Run
+ข้อควรระวัง:
 
-สคริปต์นี้จะสร้าง
-- ตาราง `public.transactions` (ผูกกับ `auth.users` ผ่าน `user_id`)
-- เปิด Row Level Security พร้อม policy ให้แต่ละคนเห็นเฉพาะข้อมูลของตัวเอง
-- index สำหรับ query ตามผู้ใช้และตามวันที่
+- ใช้เฉพาะ Supabase anon/publishable key ในแอป
+- ห้ามใส่ `service_role`, database password หรือ server secret ในตัวแปรที่ขึ้นต้นด้วย `VITE_`
+- ตัวแปร `VITE_` ทั้งหมดจะถูกฝังใน JavaScript bundle และผู้ใช้สามารถอ่านได้
+- `.env` และ `.env.*` ถูก ignore จาก Git แต่ `.env.example` ยังคง track เป็น template
+- หากไม่ได้ตั้งค่า Supabase แอปยังเปิดในโหมด Demo ได้
 
-> ถ้าเป็นโปรเจกต์เดิมที่มีข้อมูลอยู่ก่อน ต้องกำหนด `user_id` ให้ทุกแถวก่อน ไม่งั้นคำสั่ง `set not null` จะล้มเหลว สำรองข้อมูลไว้ก่อนรัน
+## เตรียมฐานข้อมูล Supabase
 
-## 5. สร้างผู้ใช้
+### โปรเจกต์ใหม่
 
-แอปใช้การล็อกอินด้วย **อีเมล + รหัสผ่าน** และ **ไม่เปิดให้สมัครสมาชิกเอง** จึงต้องสร้างผู้ใช้จากฝั่งผู้ดูแลก่อน
+1. สร้าง Supabase project
+2. เปิด **SQL Editor**
+3. รันเนื้อหาทั้งหมดจาก `supabase/schema.sql`
+4. ตรวจสอบตาราง, triggers, indexes และ RLS policies
 
-Supabase Dashboard → Authentication → Users → **Add user** → ใส่อีเมลและรหัสผ่าน แล้วติ๊ก Auto Confirm User
-เพื่อไม่ต้องรอยืนยันอีเมล
+Schema จะสร้างและป้องกันข้อมูลหลักดังนี้:
 
-ตั้งค่าที่ควรตรวจในโปรเจกต์ Supabase
-- Authentication → Sign In / Providers → เปิด **Email** และปิด **Allow new users to sign up** (แอปไม่เรียก `signUp` อยู่แล้ว
-  ปิดไว้อีกชั้นเพื่อกันคนสมัครเองผ่าน API)
-- Authentication → URL Configuration → เพิ่ม Site URL และ Redirect URLs ให้ตรงกับที่ใช้งาน เช่น
-  `http://localhost:5173` สำหรับตอนพัฒนา และโดเมนจริงสำหรับ production
-  (ลิงก์ตั้งรหัสผ่านใหม่จะเด้งกลับมาที่ URL เหล่านี้)
+- `public.transactions` ผูกกับ `auth.users`
+- `public.user_achievements`
+- RLS ให้ผู้ใช้เข้าถึงเฉพาะข้อมูลของตัวเอง
+- ปิดสิทธิ์ role `anon` สำหรับข้อมูลส่วนตัว
+- ตรวจและทำความสะอาด transaction ที่ระดับฐานข้อมูล
+- บังคับ `user_id = auth.uid()`
+- จำกัดจำนวนเงิน, ความยาวคำอธิบาย และช่วงวันที่
 
-### ผู้ใช้เดิมที่เคยใช้ Magic Link
-บัญชีที่สร้างไว้สำหรับ Magic Link จะยังไม่มีรหัสผ่าน เข้าสู่ระบบด้วยรหัสผ่านจะไม่ผ่าน แก้ได้สองทาง
-1. Dashboard → Authentication → Users → เลือกผู้ใช้ → ตั้งรหัสผ่านให้
-2. ที่หน้าเข้าสู่ระบบกด **ลืมรหัสผ่าน?** เพื่อรับลิงก์ตั้งรหัสผ่านใหม่ทางอีเมล
+> หากฐานข้อมูลเดิมมีข้อมูลอยู่แล้ว ให้สำรองข้อมูลและตรวจ `user_id` ของทุกแถวก่อนเปลี่ยน constraint หรือรัน migration
 
-### ลืมรหัสผ่าน
-กด "ลืมรหัสผ่าน?" → ระบบส่งลิงก์ทางอีเมล → กดลิงก์แล้วแอปจะแสดงหน้าตั้งรหัสผ่านใหม่ (ยาวอย่างน้อย 8 ตัวอักษร)
-การส่งอีเมลใช้โควตาของ Supabase ซึ่งจำกัด 2 ฉบับต่อชั่วโมงถ้ายังไม่ได้ตั้ง custom SMTP
+### การเปลี่ยน schema หลังจาก baseline
 
-## 6. รันแอป
+เก็บ migration ใหม่ไว้ใน `supabase/migrations/` และตั้งชื่อด้วย UTC timestamp เช่น:
+
+```text
+20260901120000_add_transaction_note.sql
+```
+
+อ่านกติกาและขั้นตอนเพิ่มเติมได้ที่ `supabase/migrations/README.md`
+
+ก่อน migration บน Production:
+
+- สำรองข้อมูลหรือเปิด Point-in-Time Recovery
+- ทดสอบบน staging ก่อน
+- แก้ Zod schema ฝั่งแอปให้ตรงกับ database constraints
+- แยก destructive migration เป็นหลายรอบ deploy
+
+## เตรียม Authentication
+
+แอปใช้ email และ password และไม่มีหน้าสมัครสมาชิกสาธารณะ
+
+1. ไปที่ **Supabase Dashboard → Authentication → Users**
+2. เลือก **Add user**
+3. ใส่อีเมลและรหัสผ่าน
+4. เปิด Auto Confirm User หากไม่ต้องการขั้นตอนยืนยันอีเมล
+
+ค่าที่ควรตรวจ:
+
+- เปิด Email provider
+- ปิด public sign-up หากต้องการให้ผู้ดูแลสร้างบัญชีเท่านั้น
+- ตั้ง Site URL และ Redirect URLs ให้ตรงกับ localhost และ Production domain
+- ตั้ง custom SMTP หากต้องการส่งอีเมลจริงเกินโควตาเริ่มต้นของ Supabase
+- ตรวจ Auth rate limits จาก Dashboard
+
+บัญชีเดิมที่เคยใช้ Magic Link อาจยังไม่มีรหัสผ่าน ให้ผู้ดูแลตั้งรหัสผ่านหรือใช้เมนู **ลืมรหัสผ่าน?**
+
+## รันแอปในเครื่อง
 
 ```powershell
 npm run dev
@@ -90,127 +175,295 @@ npm run dev
 
 เปิด `http://localhost:5173`
 
-คำสั่งอื่น
+หากใช้เครื่องที่บล็อก `npm.ps1`:
 
-| คำสั่ง | ทำอะไร |
-| --- | --- |
-| `npm run dev` | dev server พร้อม hot reload |
-| `npm run build` | ตรวจ type ด้วย `vue-tsc` แล้ว build ลง `dist/` |
-| `npm run preview` | เปิดเซิร์ฟเวอร์ดูผล build |
-| `npm run type-check` | ตรวจ type อย่างเดียว |
-
-## 7. Deploy
-
-โปรเจกต์เป็น static SPA ธรรมดา ใช้ได้กับ Vercel / Netlify / Cloudflare Pages
-
-- Build command: `npm run build`
-- Output directory: `dist`
-- ต้องตั้ง Environment Variables `VITE_SUPABASE_URL` และ `VITE_SUPABASE_ANON_KEY` ในหน้า setting ของ host ด้วย (ค่าจะถูกฝังตอน build)
-- เพิ่มโดเมนที่ deploy เข้าไปใน Redirect URLs ของ Supabase
-
-## 8. Build APK ด้วย GitHub Actions (ไม่ต้องลง Android Studio)
-
-เครื่องผู้ใช้ **ไม่ต้องมี Android Studio หรือ Android SDK** เพราะ workflow `.github/workflows/android.yml` จะ build บน GitHub runner ด้วย JDK 21 และ Android SDK 36 โดยลำดับงานคือ:
-
-1. `npm ci`
-2. `npm run build`
-3. `npx cap sync android`
-4. `android/gradlew assembleDebug`
-5. อัปโหลด `app-debug.apk` เป็น artifact ชื่อ `money-flow-debug-apk`
-
-### ตั้ง GitHub Secrets
-
-ไปที่ repository บน GitHub → **Settings** → **Secrets and variables** → **Actions** → **New repository secret** แล้วสร้างให้ครบสองชื่อ (ตัวพิมพ์ใหญ่/เล็กต้องตรง):
-
-- `VITE_SUPABASE_URL` — URL ของ Supabase project
-- `VITE_SUPABASE_ANON_KEY` — anon public key ของ Supabase
-
-ใช้ค่าเดียวกับใน `.env` แต่ห้าม commit `.env`, secret หรือ keystore เข้า git ค่า Vite ทั้งสองจะถูกฝังใน web bundle ตอน workflow build ดังนั้นต้องใช้ anon public key เท่านั้น ห้ามใช้ service role key
-
-### สั่ง build และดาวน์โหลด APK
-
-1. push การเปลี่ยนแปลงขึ้น GitHub (workflow จะทำงานเมื่อไฟล์แอป/Android ที่กำหนดเปลี่ยนบน `main`) หรือไปที่แท็บ **Actions** → **Build Android APK** → **Run workflow**
-2. รอ job **Build debug APK** เป็นสีเขียว
-3. เปิด workflow run นั้น เลื่อนลงส่วน **Artifacts** แล้วดาวน์โหลด `money-flow-debug-apk`
-4. แตกไฟล์ ZIP จะได้ `app-debug.apk`
-
-> `main` เชื่อมกับ Vercel production อยู่ ควรตรวจ type และ web build ให้ผ่านก่อน push ทุกครั้ง การเพิ่ม Capacitor ไม่เปลี่ยน Vercel output ซึ่งยังเป็น `dist/` เหมือนเดิม
-
-### คำสั่งใดต้องมี Android SDK
-
-- ไม่ต้องมี SDK: ติดตั้ง npm packages, `npx cap init`, `npx cap add android`, `npm run build` และตรวจ TypeScript
-- ต้องมี SDK/JDK หรือเครื่องมือ Android: Gradle `assembleDebug`, emulator, `adb` และ `npx cap open android` (ต้องมี Android Studio)
-- `npx cap sync android` ทำหน้าที่ copy web assets/plugins และไม่ได้ compile APK แต่โปรเจกต์นี้ตั้งใจให้ workflow เป็นผู้รัน เพื่อไม่ให้ผู้ใช้ต้องเตรียม native toolchain ในเครื่อง
-
-## 9. ติดตั้ง APK ลงมือถือ Android
-
-1. ดาวน์โหลด artifact และแตก `app-debug.apk` ตามขั้นตอนด้านบน
-2. ส่ง APK ไปมือถือผ่านสาย USB, cloud drive หรือแอปส่งไฟล์
-3. เปิดไฟล์ APK บนมือถือ หาก Android ถาม ให้เปิดสิทธิ์ **ติดตั้งแอปที่ไม่รู้จัก (Install unknown apps)** เฉพาะแอปที่ใช้เปิดไฟล์
-4. ยืนยันติดตั้ง แล้วเปิดแอป **Money Flow**
-5. เข้าสู่ระบบหรือใช้ Demo ได้เหมือนเว็บ จากนั้นไปที่ไอคอนตั้งค่าเพื่อเลือกเวลาและเปิดแจ้งเตือนรายวัน ระบบจึงจะขอสิทธิ์แจ้งเตือน (Android 13+)
-
-APK นี้เป็น **debug build** สำหรับติดตั้งทดสอบเอง ยังไม่เหมาะสำหรับ Play Store และไม่ได้ใช้ release signing หาก APK จาก workflow รอบใหม่ติดตั้งทับไม่ได้เพราะ debug signature เปลี่ยน ให้ถอนเวอร์ชันเดิมก่อนแล้วติดตั้งใหม่ (ข้อมูลธุรกรรมใน Supabase ไม่หาย แต่ค่าบนอุปกรณ์ เช่น เวลาแจ้งเตือน อาจต้องตั้งใหม่)
-
-## 10. โหมด Demo
-
-ปุ่ม **เข้าดูตัวอย่างแอป (Demo)** ที่หน้าล็อกอินจะเข้าแอปโดยไม่ต้องมีบัญชี
-
-- ข้อมูลตัวอย่างย้อนหลัง 6 เดือนถูกสร้างขึ้นในหน่วยความจำจาก `src/utils/demoData.ts` และคิดจากวันที่ปัจจุบัน
-- ไม่มีการเรียก Supabase และไม่มีการเขียนข้อมูลใด ๆ
-- เพิ่ม / แก้ไข / ลบ ถูกปิดทั้งหมด (ฟอร์มถูก disable, ปุ่มแก้ไข-ลบถูกซ่อน, danger zone ในหน้าตั้งค่าถูกซ่อน)
-- ตั้งค่าเงินเดือนยังปรับได้ เพราะเก็บใน localStorage ของเบราว์เซอร์เท่านั้น
-- ออกจากโหมดนี้ได้จากปุ่ม "เข้าสู่ระบบ" บนแถบแจ้งเตือน หรือไอคอนออกที่มุมขวาบน
-
-## 11. แก้ปัญหาที่พบบ่อย
-
-**`npm : File ...\npm.ps1 cannot be loaded because running scripts is disabled`**
-PowerShell ปิดการรันสคริปต์อยู่ เลือกทางใดทางหนึ่ง
 ```powershell
-# ทางที่ 1: อนุญาตสำหรับ user ปัจจุบัน
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-
-# ทางที่ 2: เรียกผ่าน node โดยตรง (ไม่ต้องแก้ policy)
-node "C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js" run dev
+cmd /c "npm run dev"
 ```
 
-**ขึ้นว่า "ยังไม่ได้เชื่อมฐานข้อมูล"**
-`.env` ไม่มีค่า หรือแก้ `.env` แล้วยังไม่ได้รีสตาร์ท dev server (Vite อ่าน env ตอนบูตเท่านั้น)
+## คำสั่งสำหรับพัฒนาและตรวจคุณภาพ
 
-**ขึ้นว่า "อีเมลหรือรหัสผ่านไม่ถูกต้อง" ทั้งที่มั่นใจว่าถูก**
-บัญชีนั้นอาจยังไม่มีรหัสผ่าน (เคยใช้ Magic Link) หรือยังไม่ยืนยันอีเมล ตั้งรหัสผ่านให้จาก Dashboard
-หรือใช้ปุ่มลืมรหัสผ่าน
+| คำสั่ง                  | ทำอะไร                                     |
+| ----------------------- | ------------------------------------------ |
+| `npm run dev`           | เปิด Vite development server               |
+| `npm run type-check`    | ตรวจ TypeScript/Vue types                  |
+| `npm run lint`          | ตรวจ ESLint                                |
+| `npm run lint:fix`      | แก้ lint ที่แก้อัตโนมัติได้                |
+| `npm run format:check`  | ตรวจรูปแบบด้วย Prettier                    |
+| `npm run format`        | จัดรูปแบบไฟล์                              |
+| `npm run test:run`      | รัน unit/component tests ครั้งเดียว        |
+| `npm run test:coverage` | รัน tests พร้อม coverage                   |
+| `npm run build`         | ตรวจ types และ build Production ลง `dist/` |
+| `npm run preview`       | เปิดดู Production build ในเครื่อง          |
 
-**กดลิงก์ตั้งรหัสผ่านแล้วเด้งกลับหน้าล็อกอิน**
-Redirect URL ใน Supabase ไม่ตรงกับ origin ที่เปิดเว็บ ตรวจที่ Authentication → URL Configuration
+ก่อนเปิด Pull Request หรือ push เข้า `main` ควรรัน:
 
-**ล็อกอินได้แต่ไม่เห็นข้อมูล / บันทึกไม่ได้**
-ยังไม่ได้รัน `supabase/schema.sql` หรือ RLS policy ไม่ครบ ลองรันสคริปต์ซ้ำ (เขียนให้รันซ้ำได้ปลอดภัย)
-
-## 12. โครงสร้างโปรเจกต์คร่าว ๆ
-
+```powershell
+npm run lint
+npm run type-check
+npm run test:run
+npm run build
 ```
+
+สถานะชุดทดสอบล่าสุด:
+
+```text
+12 test files passed
+319 tests passed
+0 tests failed
+```
+
+## GitHub Actions
+
+Repository มี workflow สองชุด:
+
+| Workflow          | ไฟล์                            | หน้าที่                                    |
+| ----------------- | ------------------------------- | ------------------------------------------ |
+| CI                | `.github/workflows/ci.yml`      | Type-check, lint, tests, web build         |
+| Build Android APK | `.github/workflows/android.yml` | Build web, sync Capacitor, build debug APK |
+
+CI ทำงานเมื่อ push เข้า `main` หรือเปิด Pull Request ส่วน Android workflow ทำงานเมื่อ push ไฟล์ที่เกี่ยวข้องเข้า `main` และสั่งรันเองผ่าน `workflow_dispatch` ได้
+
+## Build APK ผ่าน GitHub Actions
+
+วิธีนี้ไม่ต้องติดตั้ง Android Studio หรือ Android SDK ในเครื่องผู้ใช้ GitHub runner จะใช้ Node.js 24, JDK 21 และ Android SDK 36
+
+### 1. ตั้ง GitHub Secrets
+
+ไปที่:
+
+```text
+Repository → Settings → Secrets and variables → Actions
+```
+
+สร้าง Repository secrets:
+
+```text
+VITE_SUPABASE_URL
+VITE_SUPABASE_ANON_KEY
+```
+
+ใช้ anon/publishable key เท่านั้น ห้ามใช้ service role key
+
+### 2. สั่ง Build
+
+เลือกได้สองวิธี:
+
+1. Push การเปลี่ยนแปลงที่เกี่ยวข้องเข้า `main`; workflow จะเริ่มอัตโนมัติ
+2. ไปที่ **Actions → Build Android APK → Run workflow → main → Run workflow**
+
+Workflow จะรัน:
+
+```text
+npm ci
+npm run build
+npx cap sync android
+./gradlew assembleDebug --no-daemon
+```
+
+### 3. ดาวน์โหลด APK
+
+1. รอ job **Build debug APK** เป็นสีเขียว
+2. เปิด workflow run
+3. เลื่อนลงส่วน **Artifacts**
+4. ดาวน์โหลด `money-flow-debug-apk`
+5. แตก ZIP เพื่อรับ `app-debug.apk`
+
+Artifact ถูกเก็บไว้ 14 วัน
+
+APK นี้เป็น debug build สำหรับทดสอบและแจกภายใน ยังไม่ใช่ signed release สำหรับ Google Play
+
+## ติดตั้ง APK ลง Android
+
+1. ส่ง `app-debug.apk` ไปยังโทรศัพท์
+2. เปิดไฟล์ APK
+3. อนุญาต **Install unknown apps** เฉพาะแอปที่ใช้เปิดไฟล์
+4. ยืนยันการติดตั้ง
+5. เปิดแอป **Money Flow** และเข้าสู่ระบบหรือเลือกโหมด Demo
+
+หาก debug APK รอบใหม่ติดตั้งทับไม่ได้ ให้ถอนเวอร์ชันเดิมแล้วติดตั้งใหม่ ข้อมูล transaction ที่อยู่ใน Supabase จะไม่หาย แต่ค่าที่เก็บเฉพาะอุปกรณ์อาจต้องตั้งใหม่
+
+## Build Android ในเครื่อง
+
+ทุกครั้งที่เปลี่ยนเว็บ ให้ build และ sync ก่อน:
+
+```powershell
+npm run build
+npx cap sync android
+```
+
+สร้าง Debug APK บน Windows:
+
+```powershell
+.\android\gradlew.bat -p android assembleDebug
+```
+
+ไฟล์ที่ได้:
+
+```text
+android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+เปิด Android Studio:
+
+```powershell
+npx cap open android
+```
+
+สำหรับ Play Store ให้ตั้ง release signing และสร้าง Android App Bundle (`.aab`) ห้าม commit keystore หรือรหัสผ่านเข้า repository
+
+## Deploy เว็บ
+
+โปรเจกต์เป็น static SPA และมี config พร้อมสำหรับ Vercel และ Netlify
+
+### Vercel
+
+ใช้ `vercel.json` ซึ่งกำหนด:
+
+```text
+Build command: npm run build
+Output directory: dist
+```
+
+### Netlify
+
+ใช้ `netlify.toml` และ `public/_headers` ซึ่งกำหนด build, SPA fallback, security headers และ cache policy
+
+ทุก platform ต้องตั้ง environment variables อย่างน้อย:
+
+```text
+VITE_SUPABASE_URL
+VITE_SUPABASE_ANON_KEY
+```
+
+หากใช้ monitoring ให้เพิ่ม:
+
+```text
+VITE_SENTRY_DSN
+VITE_SENTRY_TRACES_SAMPLE_RATE
+VITE_APP_ENV=production
+```
+
+หลัง deploy ต้องเพิ่ม Production domain ใน Supabase Auth Redirect URLs
+
+## Offline และ Error handling
+
+- แอปเก็บ transaction ใหม่ไว้ใน offline queue เมื่ออินเทอร์เน็ตขาด
+- เมื่อกลับมาออนไลน์ แอปจะพยายามซิงก์รายการที่ค้าง
+- Pending rows แสดงรวมกับรายการจาก server
+- การแก้ไขและลบขณะ offline ถูกปิด เพราะต้องอ้างอิง server row จริง
+- API ที่ล้มเหลวชั่วคราวจะ retry ด้วย backoff
+- หาก session หมดอายุ แอปจะลอง refresh session และจำหน้าที่ผู้ใช้อยู่
+- Error Boundary ป้องกัน component error ทำให้หน้าจอขาว
+- Sentry จะเริ่มทำงานเฉพาะเมื่อกำหนด `VITE_SENTRY_DSN`
+
+## โหมด Demo
+
+กด **เข้าดูตัวอย่างแอป (Demo)** จากหน้าเข้าสู่ระบบเพื่อทดลองโดยไม่ต้องมีบัญชี
+
+- สร้างข้อมูลตัวอย่างย้อนหลังในหน่วยความจำ
+- ไม่เรียกหรือเขียนข้อมูลลง Supabase
+- ปิดการเพิ่ม แก้ไข ลบ และ danger zone
+- ใช้ analytics และธีมได้เหมือนแอปจริง
+- ออกจาก Demo ได้จากแถบแจ้งเตือนหรือปุ่มเข้าสู่ระบบ
+
+## โครงสร้างโปรเจกต์
+
+```text
 src/
-  App.vue                  หน้าหลัก จัดการ state, auth, โหมด demo
+  App.vue                        composition root และหน้าหลัก
   components/
-    AuthGate.vue           หน้าล็อกอินด้วยอีเมล+รหัสผ่าน, ลืมรหัสผ่าน, ปุ่มเข้าโหมด demo
-    PasswordResetScreen.vue หน้าตั้งรหัสผ่านใหม่ เปิดจากลิงก์ในอีเมล
-    TransactionForm.vue    ฟอร์มบันทึกรายการ
-    TransactionList.vue    รายการธุรกรรม (รองรับโหมดอ่านอย่างเดียว)
-    SummaryCards.vue       การ์ดสรุปยอด
-    CashFlowChart.vue      กราฟแท่งรายรับ-รายจ่าย 6 เดือน
-    CategoryDonut.vue      กราฟวงกลมแยกหมวดหมู่ กดดูรายการในแต่ละ % ได้
-    BubbleGalaxy.vue       แท็บฟองเงิน ฟองละหนึ่งของที่จ่ายซ้ำ ขนาดตามจำนวนครั้ง
-    ExpenseAnalytics.vue   วิเคราะห์รายจ่ายรายเดือน + เทียบเดือนก่อน
-    MoneyBuddy.vue         ผู้ช่วยคาดการณ์เงินคงเหลือ
-    SettingsModal.vue      ตั้งค่าเงินเดือน / จัดการข้อมูล
-  utils/
-    categoryBreakdown.ts   รวมยอดตามหมวดหมู่ให้กราฟวงกลม
-    demoData.ts            ชุดข้อมูลตัวอย่างของโหมด demo
-    authErrors.ts          แปล error ของ Supabase Auth เป็นภาษาไทย
-    bubbleField.ts         ฟิสิกส์และการจัดขนาด/ตัดชื่อของฟองเงิน (แยกให้ทดสอบได้)
-    spendingHabits.ts      รวมรายการชื่อซ้ำเป็นของที่จ่ายบ่อย พร้อมจำนวนครั้งและยอดรวม
-    forecast.ts, format.ts
-  lib/supabase.ts          สร้าง Supabase client จาก env
-supabase/schema.sql        สคริปต์สร้างตารางและ RLS
+    AuthGate.vue                 login, reset password และ Demo entry
+    ErrorBoundary.vue            fallback เมื่อ component เกิด error
+    TransactionForm.vue          ฟอร์มเพิ่ม/แก้ไขพร้อม Zod validation
+    TransactionList.vue          รายการและ incremental rendering
+    SummaryCards.vue             การ์ดสรุปพร้อม Skeleton state
+    SettingsModal.vue            การตั้งค่า, export และ OPIUM theme
+    CategoryDonut.vue            สัดส่วนรายจ่ายตามหมวดหมู่
+    BubbleGalaxy.vue             Bubble visualization
+    ExpenseAnalytics.vue         วิเคราะห์รายจ่าย
+    MoneyBuddy.vue               คาดการณ์สถานะเงิน
+  composables/
+    useAuth.ts                   session, login และ password recovery
+    useTransactions.ts           fetch/mutate และ offline integration
+    useOfflineQueue.ts           queue และ sync รายการ offline
+    useNavigation.ts             route/hash state
+    useUndoDelete.ts             undo transaction deletion
+    useInstallPrompt.ts          PWA installation
+    useTheme.ts                  persisted default/OPIUM theme
+  schemas/
+    transaction.schema.ts        client transaction constraints
+  lib/
+    api.ts                       timeout, retry และ user-facing errors
+    monitoring.ts                optional Sentry integration
+    supabase.ts                  Supabase client
+  utils/                         analytics, formatting, forecast และ demo data
+supabase/
+  schema.sql                     baseline schema, triggers และ RLS
+  migrations/                    schema changes หลัง baseline
+android/                         Capacitor Android project
+.github/workflows/               CI และ Android APK workflows
 ```
+
+## Security checklist ก่อน Production
+
+- ใช้ anon/publishable key ฝั่ง client เท่านั้น
+- ตรวจ RLS และ policies ทุกตาราง
+- ปิด public sign-up หากระบบไม่เปิดให้สมัครเอง
+- ตั้ง Auth rate limits และ custom SMTP
+- เปิด database backups หรือ Point-in-Time Recovery
+- ตั้ง environment variables บน hosting และ GitHub Actions
+- ตั้ง Sentry DSN และ sample rate ตามความเหมาะสม
+- ทดสอบ migration บน staging ก่อน Production
+- ห้าม commit `.env`, service role key, keystore หรือ signing password
+
+## แก้ปัญหาที่พบบ่อย
+
+### PowerShell บล็อก npm.ps1
+
+```powershell
+cmd /c "npm run dev"
+```
+
+หรืออนุญาต script สำหรับผู้ใช้ปัจจุบัน:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+### แอปแจ้งว่ายังไม่ได้เชื่อมฐานข้อมูล
+
+ตรวจ `.env`, ชื่อตัวแปร และ restart Vite เพราะ environment variables ถูกอ่านตอนเริ่ม process
+
+### เข้าสู่ระบบได้แต่ไม่เห็นหรือบันทึกข้อมูลไม่ได้
+
+ตรวจว่าได้รัน `supabase/schema.sql`, ผู้ใช้ได้รับการยืนยัน และ RLS policies ถูกสร้างครบ
+
+### ลิงก์ตั้งรหัสผ่านกลับมาหน้า login
+
+ตรวจ Site URL และ Redirect URLs ใน Supabase Authentication
+
+### GitHub Actions build APK ไม่ผ่าน
+
+ตรวจตามลำดับ:
+
+1. Repository secrets มีชื่อถูกต้อง
+2. เปิด log ของ step แรกที่เป็นสีแดง
+3. ตรวจว่า `npm run build` ผ่านในเครื่อง
+4. ตรวจ Android SDK/Gradle error ใน step **Build debug APK**
+5. ห้ามดาวน์โหลดจากหน้า job; Artifact อยู่ด้านล่างของหน้า workflow run
+
+### APK ติดตั้งทับไม่ได้
+
+Debug signature อาจต่างจาก APK ที่ติดตั้งอยู่ ถอนแอปเดิมแล้วติดตั้งใหม่ หรือสร้าง signed release ด้วย keystore เดิม
+
+## หมายเหตุการ Release
+
+ก่อนออกเวอร์ชัน Android ใหม่ ให้เพิ่มค่าใน `android/app/build.gradle`:
+
+```gradle
+versionCode 2
+versionName "1.1.0"
+```
+
+`versionCode` ต้องเพิ่มขึ้นทุกครั้ง ส่วน `versionName` คือเวอร์ชันที่ผู้ใช้มองเห็น
