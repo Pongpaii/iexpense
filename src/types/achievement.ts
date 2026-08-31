@@ -52,11 +52,26 @@ const expensesOf = (transactions: readonly Transaction[]) =>
 const recordedDatesOf = (transactions: readonly Transaction[]) =>
   transactions.map(({ transaction_date }) => transaction_date).filter(isIsoDate)
 
-/** ชั่วโมงตามเวลาท้องถิ่นที่รายการถูกจด คืน null เมื่อ created_at ใช้ไม่ได้ */
+/** ชั่วโมงใน timezone ที่บันทึกมากับรายการ; fallback เป็น timezone ของอุปกรณ์ปัจจุบัน */
 const recordedHour = (transaction: Transaction) => {
   if (!transaction.created_at) return null
   const stamp = new Date(transaction.created_at)
-  return Number.isNaN(stamp.getTime()) ? null : stamp.getHours()
+  if (Number.isNaN(stamp.getTime())) return null
+
+  if (transaction.client_timezone) {
+    try {
+      const hour = new Intl.DateTimeFormat('en-US', {
+        timeZone: transaction.client_timezone,
+        hour: '2-digit',
+        hourCycle: 'h23',
+      }).formatToParts(stamp).find((part) => part.type === 'hour')?.value
+      if (hour !== undefined) return Number(hour)
+    } catch {
+      // Invalid legacy timezone values fall back to the current device timezone.
+    }
+  }
+
+  return stamp.getHours()
 }
 
 /** จำนวนวันติดกันมากที่สุดที่รายจ่ายรวมไม่เกินเพดานของวันนั้น (นับเฉพาะวันที่มีการจด) */

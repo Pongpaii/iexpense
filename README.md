@@ -27,7 +27,7 @@ Money Flow รองรับการล็อกอิน, การวิเ�
 - Error Boundary, global error handlers และ optional Sentry monitoring
 - Lazy-loaded analytics components และ Skeleton loading
 - ดึง transaction จาก Supabase เป็นช่วงและแสดงรายการครั้งละ 50 แถว
-- Security headers และ cache policy สำหรับ Vercel/Netlify
+- Security headers และ cache policy สำหรับ Vercel
 - CI ตรวจ TypeScript, ESLint, 319 tests และ production build
 
 ## เทคโนโลยี
@@ -41,7 +41,7 @@ Money Flow รองรับการล็อกอิน, การวิเ�
 | PWA        | vite-plugin-pwa, Workbox                      |
 | Testing    | Vitest, Vue Test Utils, Happy DOM             |
 | Monitoring | Sentry (เลือกเปิดใช้ได้)                      |
-| CI/CD      | GitHub Actions, Vercel, Netlify               |
+| CI/CD      | GitHub Actions, Vercel                        |
 
 ## สิ่งที่ต้องมี
 
@@ -314,7 +314,7 @@ npx cap open android
 
 ## Deploy เว็บ
 
-โปรเจกต์เป็น static SPA และมี config พร้อมสำหรับ Vercel และ Netlify
+โปรเจกต์เป็น static SPA และมี config พร้อมสำหรับ Vercel
 
 ### Vercel
 
@@ -324,10 +324,6 @@ npx cap open android
 Build command: npm run build
 Output directory: dist
 ```
-
-### Netlify
-
-ใช้ `netlify.toml` และ `public/_headers` ซึ่งกำหนด build, SPA fallback, security headers และ cache policy
 
 ทุก platform ต้องตั้ง environment variables อย่างน้อย:
 

@@ -11,28 +11,40 @@ const emit = defineEmits<{
   demo: []
 }>()
 
-type AuthMode = 'signIn' | 'forgot'
+type AuthMode = 'signIn' | 'signUp' | 'forgot'
 
 const mode = ref<AuthMode>('signIn')
 const email = ref('')
 const password = ref('')
+const confirmPassword = ref('')
 const showPassword = ref(false)
 const loading = ref(false)
 const resetSent = ref(false)
+const signUpSent = ref(false)
 const errorMessage = ref('')
 
 const displayedError = computed(() => errorMessage.value || props.initialError || '')
 const canSubmitSignIn = computed(() => Boolean(email.value.trim() && password.value))
+const canSubmitSignUp = computed(() =>
+  Boolean(email.value.trim() && password.value && confirmPassword.value),
+)
 
 const clearFeedback = () => {
   errorMessage.value = ''
 }
 
+const showAuthError = (error: unknown) => {
+  const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง'
+  errorMessage.value = describeAuthError(message)
+}
+
 const switchMode = (next: AuthMode) => {
   mode.value = next
   resetSent.value = false
+  signUpSent.value = false
   errorMessage.value = ''
-  if (next === 'forgot') password.value = ''
+  password.value = ''
+  confirmPassword.value = ''
 }
 
 const signIn = async () => {
@@ -45,16 +57,62 @@ const signIn = async () => {
   loading.value = true
   errorMessage.value = ''
 
-  const { error } = await supabase.auth.signInWithPassword({
-    email: email.value.trim(),
-    password: password.value,
-  })
+  try {
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.value.trim(),
+      password: password.value,
+    })
 
-  // ไม่บอกว่าอีเมลมีอยู่จริงหรือไม่ เพื่อไม่ให้ใช้หน้านี้ไล่เดาว่าใครสมัครไว้
-  if (error) errorMessage.value = describeAuthError(error.message)
-  else password.value = ''
+    if (error) errorMessage.value = describeAuthError(error.message)
+    else password.value = ''
+  } catch (error) {
+    showAuthError(error)
+  } finally {
+    loading.value = false
+  }
+}
 
-  loading.value = false
+const signUp = async () => {
+  if (!supabase) {
+    errorMessage.value = 'ยังไม่ได้ตั้งค่า Supabase กรุณาตรวจสอบ Environment Variables'
+    return
+  }
+  if (!canSubmitSignUp.value || loading.value) return
+
+  const normalizedEmail = email.value.trim()
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    errorMessage.value = 'กรุณากรอกอีเมลให้ถูกต้อง'
+    return
+  }
+  if (password.value.length < 8) {
+    errorMessage.value = 'รหัสผ่านต้องยาวอย่างน้อย 8 ตัวอักษร'
+    return
+  }
+  if (confirmPassword.value !== password.value) {
+    errorMessage.value = 'รหัสผ่านและการยืนยันรหัสผ่านไม่ตรงกัน'
+    return
+  }
+
+  loading.value = true
+  errorMessage.value = ''
+
+  try {
+    const { error } = await supabase.auth.signUp({
+      email: normalizedEmail,
+      password: password.value,
+    })
+
+    if (error) errorMessage.value = describeAuthError(error.message)
+    else {
+      password.value = ''
+      confirmPassword.value = ''
+      signUpSent.value = true
+    }
+  } catch (error) {
+    showAuthError(error)
+  } finally {
+    loading.value = false
+  }
 }
 
 const sendResetLink = async () => {
@@ -69,15 +127,19 @@ const sendResetLink = async () => {
   loading.value = true
   errorMessage.value = ''
 
-  const redirectUrl = new URL(import.meta.env.BASE_URL, window.location.origin).toString()
-  const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
-    redirectTo: redirectUrl,
-  })
+  try {
+    const redirectUrl = new URL(import.meta.env.BASE_URL, window.location.origin).toString()
+    const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+      redirectTo: redirectUrl,
+    })
 
-  if (error) errorMessage.value = describeAuthError(error.message)
-  else resetSent.value = true
-
-  loading.value = false
+    if (error) errorMessage.value = describeAuthError(error.message)
+    else resetSent.value = true
+  } catch (error) {
+    showAuthError(error)
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 
@@ -86,12 +148,27 @@ const sendResetLink = async () => {
     <section class="auth-card" aria-labelledby="auth-title">
       <div class="auth-brand" aria-hidden="true">฿</div>
       <span class="auth-kicker">Money Flow</span>
-      <h1 id="auth-title">{{ mode === 'forgot' ? 'ตั้งรหัสผ่านใหม่' : 'ยินดีต้อนรับกลับ' }}</h1>
+      <h1 id="auth-title">
+        {{ mode === 'forgot' ? 'ตั้งรหัสผ่านใหม่' : mode === 'signUp' ? 'สร้างบัญชีใหม่' : 'ยินดีต้อนรับกลับ' }}
+      </h1>
 
       <template v-if="!isSupabaseConfigured">
         <p class="auth-description">
           ยังไม่ได้เชื่อมต่อ Supabase กรุณาเพิ่ม Project URL และ Anon Key ใน Environment Variables
         </p>
+      </template>
+
+      <template v-else-if="signUpSent">
+        <div class="mail-sent" role="status" aria-live="polite">
+          <span aria-hidden="true">✓</span>
+          <div>
+            <strong>สมัครสมาชิกสำเร็จ</strong>
+            <p>กรุณาเปิดอีเมล <b>{{ email.trim() }}</b> เพื่อยืนยันบัญชีก่อนเข้าสู่ระบบ</p>
+          </div>
+        </div>
+        <button class="secondary-button" type="button" @click="switchMode('signIn')">
+          กลับไปหน้าเข้าสู่ระบบ
+        </button>
       </template>
 
       <template v-else-if="resetSent">
@@ -160,6 +237,79 @@ const sendResetLink = async () => {
         <button class="text-button" type="button" :disabled="loading" @click="switchMode('forgot')">
           ลืมรหัสผ่าน?
         </button>
+        <button class="text-button" type="button" :disabled="loading" @click="switchMode('signUp')">
+          ยังไม่มีบัญชี? สมัครสมาชิก
+        </button>
+      </form>
+
+      <form v-else-if="mode === 'signUp'" class="auth-form" novalidate @submit.prevent="signUp">
+        <p class="auth-description">กรอกข้อมูลเพื่อสร้างบัญชีใหม่</p>
+
+        <label for="signup-email">
+          <span>อีเมล</span>
+          <input
+            id="signup-email"
+            v-model="email"
+            type="email"
+            autocomplete="email"
+            inputmode="email"
+            placeholder="you@example.com"
+            required
+            :disabled="loading"
+            @input="clearFeedback"
+          />
+        </label>
+
+        <label for="signup-password">
+          <span>รหัสผ่าน</span>
+          <span class="password-field">
+            <input
+              id="signup-password"
+              v-model="password"
+              :type="showPassword ? 'text' : 'password'"
+              autocomplete="new-password"
+              placeholder="อย่างน้อย 8 ตัวอักษร"
+              required
+              minlength="8"
+              :disabled="loading"
+              @input="clearFeedback"
+            />
+            <button
+              type="button"
+              :aria-label="showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'"
+              :aria-pressed="showPassword"
+              :disabled="loading"
+              @click="showPassword = !showPassword"
+            >
+              {{ showPassword ? 'ซ่อน' : 'แสดง' }}
+            </button>
+          </span>
+        </label>
+
+        <label for="signup-confirm-password">
+          <span>ยืนยันรหัสผ่าน</span>
+          <input
+            id="signup-confirm-password"
+            v-model="confirmPassword"
+            :type="showPassword ? 'text' : 'password'"
+            autocomplete="new-password"
+            placeholder="กรอกรหัสผ่านอีกครั้ง"
+            required
+            :disabled="loading"
+            @input="clearFeedback"
+          />
+        </label>
+
+        <p v-if="displayedError" class="auth-error" role="alert">{{ displayedError }}</p>
+
+        <button class="primary-button" type="submit" :disabled="loading || !canSubmitSignUp">
+          <span v-if="loading" class="auth-spinner" aria-hidden="true"></span>
+          {{ loading ? 'กำลังสมัครสมาชิก...' : 'สมัครสมาชิก' }}
+        </button>
+
+        <button class="text-button" type="button" :disabled="loading" @click="switchMode('signIn')">
+          มีบัญชีแล้ว? เข้าสู่ระบบ
+        </button>
       </form>
 
       <form v-else class="auth-form" @submit.prevent="sendResetLink">
@@ -204,7 +354,7 @@ const sendResetLink = async () => {
         เข้าไม่ได้ก็ดูได้ ข้อมูลเป็นตัวอย่างสมมติ ดูได้อย่างเดียว เพิ่ม/แก้ไข/ลบไม่ได้
       </p>
 
-      <small>เข้าได้เฉพาะบัญชีที่สร้างไว้แล้ว · ไม่มีการเปิดสมัครสมาชิกใหม่</small>
+      <small>สมัครสมาชิกเพื่อบันทึกข้อมูลของคุณ หรือทดลองใช้งานผ่านโหมด Demo</small>
     </section>
   </main>
 </template>

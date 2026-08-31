@@ -1,23 +1,19 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, h, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue'
 import AchievementToast from './components/AchievementToast.vue'
 import AuthGate from './components/AuthGate.vue'
-import CategoryDonut from './components/CategoryDonut.vue'
-import DailyCapBar from './components/DailyCapBar.vue'
 import EditTransactionModal from './components/EditTransactionModal.vue'
-import MoneyBuddy from './components/MoneyBuddy.vue'
-import SkeletonPanel from './components/SkeletonPanel.vue'
 import PasswordResetScreen from './components/PasswordResetScreen.vue'
 import SettingsModal from './components/SettingsModal.vue'
-import StreakPill from './components/StreakPill.vue'
-import SummaryCards from './components/SummaryCards.vue'
-import TransactionForm from './components/TransactionForm.vue'
-import TransactionList from './components/TransactionList.vue'
+import BubblePage from './pages/BubblePage.vue'
+import OverviewPage from './pages/OverviewPage.vue'
+import RecordPage from './pages/RecordPage.vue'
 import { useAchievements } from './composables/useAchievements'
 import { useAppMessages } from './composables/useAppMessages'
 import { useAuth } from './composables/useAuth'
 import { useInstallPrompt } from './composables/useInstallPrompt'
 import { useNavigation } from './composables/useNavigation'
+import { useServerSettings } from './composables/useServerSettings'
 import { useTransactions } from './composables/useTransactions'
 import { useUndoDelete } from './composables/useUndoDelete'
 import { isSupabaseConfigured } from './lib/supabase'
@@ -25,42 +21,6 @@ import type { Transaction, TransactionType } from './types/transaction'
 import { createDemoTransactions, DEMO_USER_EMAIL } from './utils/demoData'
 import { exportMonthlyCsv } from './utils/monthlyExport'
 
-/**
- * คอมโพเนนต์หนักที่ไม่ได้ใช้ตั้งแต่วินาทีแรก แยกเป็น chunk ของตัวเอง
- *
- * หน้าแรกที่ผู้ใช้เห็นคือหน้า "จดรายการ" กราฟ ปฏิทินความร้อน ฟองเงิน
- * และตู้ความสำเร็จจึงไม่จำเป็นต้องอยู่ใน bundle ก้อนแรก
- * ใส่ loadingComponent ไว้เพื่อให้ระหว่างดาวน์โหลด chunk พื้นที่ยังคงความสูงเดิม
- */
-const lazyPanel = (
-  loader: () => Promise<unknown>,
-  skeleton: { height?: number; rows?: number; variant?: 'chart' | 'list'; label: string },
-) =>
-  defineAsyncComponent({
-    loader: loader as never,
-    loadingComponent: {
-      name: 'LazyPanelFallback',
-      render: () => h(SkeletonPanel, skeleton),
-    },
-    delay: 120,
-  })
-
-const CashFlowChart = lazyPanel(() => import('./components/CashFlowChart.vue'), {
-  height: 210,
-  label: 'กำลังโหลดกราฟกระแสเงิน',
-})
-const ExpenseAnalytics = lazyPanel(() => import('./components/ExpenseAnalytics.vue'), {
-  height: 260,
-  label: 'กำลังโหลดบทวิเคราะห์รายจ่าย',
-})
-const HeatmapCalendar = lazyPanel(() => import('./components/HeatmapCalendar.vue'), {
-  height: 200,
-  label: 'กำลังโหลดปฏิทินการใช้จ่าย',
-})
-const BubbleGalaxy = lazyPanel(() => import('./components/BubbleGalaxy.vue'), {
-  height: 380,
-  label: 'กำลังโหลดฟองเงิน',
-})
 /**
  * ตู้ความสำเร็จเป็น modal ไม่ใส่ loadingComponent เพราะ skeleton แบบ panel
  * จะโผล่มาอยู่ในเลย์เอาต์ปกติ ไม่ใช่ในหน้าต่างซ้อน
@@ -122,6 +82,7 @@ const auth = useAuth({
   onMessage: showMessage,
   onError: showError,
   onSessionActive: async () => {
+    await settings.loadSettings()
     await tx.loadTransactions()
     await loadAchievements()
     await checkAchievements()
@@ -134,6 +95,12 @@ const auth = useAuth({
   rememberReturnLocation,
   restoreReturnLocation,
   clearReturnLocation,
+})
+
+const settings = useServerSettings(auth.userId)
+
+watch(settings.errorMessage, (message) => {
+  if (message) showError(message)
 })
 
 const tx = useTransactions({
@@ -597,212 +564,72 @@ onMounted(() => void auth.initialize())
       </Transition>
 
       <Transition name="page" mode="out-in">
-        <section v-if="activePage === 'record'" key="record" class="app-page record-page">
-        <header class="page-heading record-heading">
-          <div>
-            <span>{{ isRecordToday ? 'Quick record' : 'บันทึกย้อนหลัง' }}</span>
-            <h1>{{ isRecordToday ? 'วันนี้จดอะไรบ้าง?' : recordDateLabel }}</h1>
-          </div>
-
-          <div class="record-heading-actions">
-            <div class="day-navigation" role="group" aria-label="เปลี่ยนวันที่บันทึก">
-              <button type="button" aria-label="วันก่อนหน้า" title="วันก่อนหน้า" @click="shiftRecordDate(-1)">‹</button>
-              <button class="today-jump" type="button" :disabled="isRecordToday" @click="goToToday">
-                {{ isRecordToday ? 'วันนี้' : 'กลับวันนี้' }}
-              </button>
-              <button type="button" aria-label="วันถัดไป" title="วันถัดไป" :disabled="isRecordToday" @click="shiftRecordDate(1)">›</button>
-            </div>
-            <button class="text-link" type="button" @click="navigateTo('overview')">ดูภาพรวม →</button>
-          </div>
-        </header>
-
-        <StreakPill class="record-streak" :transactions="transactions" :persist="!demoMode" />
-
-        <div class="record-grid">
-          <TransactionForm
-            :key="formVersion"
-            class="dashboard-form"
-            :editing="null"
-            :busy="saving"
-            :disabled="!isSupabaseConfigured || demoMode"
-            :default-date="selectedRecordDate"
-            @submit="saveTransaction"
-          />
-
-          <section class="today-column" aria-label="รายการวันนี้">
-            <DailyCapBar
-              class="record-cap"
-              :date="selectedRecordDate"
-              :transactions="recordTransactions"
-              :is-today="isRecordToday"
-              @edit="settingsOpen = true"
-            />
-
-            <SummaryCards
-              :loading="loading && transactions.length === 0"
-              :balance="recordBalance"
-              :income="recordIncome"
-              :expense="recordExpense"
-              :balance-label="isRecordToday ? 'ยอดคงเหลือปัจจุบัน' : 'ยอดคงเหลือ ณ วันนั้น'"
-              :income-label="isRecordToday ? 'รายรับวันนี้' : 'รายรับวันนั้น'"
-              :expense-label="isRecordToday ? 'รายจ่ายวันนี้' : 'รายจ่ายวันนั้น'"
-            />
-            <TransactionList
-              class="record-list"
-              :transactions="recordTransactions"
-              :loading="loading"
-              :busy-id="busyId"
-              :selection-mode="false"
-              :bulk-busy="bulkBusy"
-              :read-only="demoMode"
-              :empty-hint="isRecordToday ? 'วันนี้ยังไม่มีรายการ เริ่มจดจากฟอร์มได้เลย' : `${recordDateLabel} ยังไม่มีรายการ`"
-              @edit="editTransaction"
-              @delete="deleteTransaction"
-              @bulk-delete="handleBulkDelete"
-              @cancel-selection="selectionMode = false"
-            />
-
-            <CategoryDonut
-              class="donut-card--wide record-donut"
-              :transactions="recordTransactions"
-              type="expense"
-              show-type-toggle
-              eyebrow="Daily breakdown"
-              :title="isRecordToday ? 'สัดส่วนหมวดหมู่วันนี้' : `สัดส่วนหมวดหมู่ ${recordDateLabel}`"
-              :show-item-date="false"
-              :empty-hint="isRecordToday
-                ? 'จดรายการของวันนี้แล้วกราฟวงกลมจะแยกสัดส่วนให้ทันที'
-                : 'ยังไม่มีรายการของวันนั้น เลือกวันอื่นหรือเพิ่มรายการได้เลย'"
-            />
-          </section>
-
-          <MoneyBuddy
-            class="compact-buddy record-buddy"
-            :income="allIncome"
-            :expense="allExpense"
-            :balance="allBalance"
-            :transactions="transactions"
-            scope-label="เงินทั้งหมด"
-            @edit-salary="settingsOpen = true"
-          />
-        </div>
-      </section>
-
-        <section v-else-if="activePage === 'overview'" key="overview" class="app-page overview-page">
-        <section class="overview-panel" aria-labelledby="overview-title">
-          <div class="overview-controls">
-            <div class="overview-title">
-              <div>
-                <span>ภาพรวมย้อนหลัง</span>
-                <h1 id="overview-title">{{ overviewPeriodLabel }}</h1>
-              </div>
-              <small>{{ filteredTransactions.length }} รายการ</small>
-            </div>
-
-            <div class="overview-filter-controls">
-              <div class="overview-tabs" role="group" aria-label="ช่วงเวลาของภาพรวม">
-                <button type="button" :class="{ active: viewMode === 'month' }" @click="viewMode = 'month'">
-                  รายเดือน
-                </button>
-                <button type="button" :class="{ active: viewMode === 'all' }" @click="viewMode = 'all'">
-                  ทั้งหมด
-                </button>
-              </div>
-
-              <label v-if="viewMode === 'month'" class="month-picker">
-                <span>เลือกเดือน</span>
-                <input
-                  v-model="selectedOverviewMonth"
-                  type="month"
-                  :max="todayDate.slice(0, 7)"
-                  aria-label="เลือกเดือนที่ต้องการดู"
-                />
-              </label>
-
-              <button
-                v-if="viewMode === 'month'"
-                class="export-button"
-                type="button"
-                :disabled="exportBusy || !isOverviewMonthValid || filteredTransactions.length === 0"
-                :title="!isOverviewMonthValid
-                  ? 'กรุณาเลือกเดือนให้ถูกต้อง'
-                  : filteredTransactions.length === 0
-                    ? 'เดือนนี้ยังไม่มีข้อมูลให้ส่งออก'
-                    : 'ส่งออกรายงานประจำเดือนเป็นไฟล์ CSV'"
-                @click="handleMonthlyExport"
-              >
-                <span v-if="exportBusy" class="export-spinner" aria-hidden="true"></span>
-                <svg v-else viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 3v11m0 0 4-4m-4 4-4-4M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" />
-                </svg>
-                <span>{{ exportBusy ? 'กำลังสร้างไฟล์' : 'Export CSV' }}</span>
-                <small v-if="!exportBusy">{{ filteredTransactions.length }} รายการ</small>
-              </button>
-            </div>
-          </div>
-
-          <SummaryCards
-            :loading="loading && transactions.length === 0"
-            :balance="balance"
-            :income="income"
-            :expense="expense"
-            :balance-label="viewMode === 'month' ? 'ยอดคงเหลือสะสม' : 'ยอดคงเหลือทั้งหมด'"
-            :income-label="viewMode === 'month' ? 'รายรับของเดือน' : 'รายรับทั้งหมด'"
-            :expense-label="viewMode === 'month' ? 'รายจ่ายของเดือน' : 'รายจ่ายทั้งหมด'"
-          />
-        </section>
-
-        <HeatmapCalendar
-          class="overview-heatmap"
+        <RecordPage
+          v-if="activePage === 'record'"
+          key="record"
           :transactions="transactions"
-          :month="isOverviewMonthValid ? selectedOverviewMonth : todayDate.slice(0, 7)"
-          @select-day="openRecordDay"
-          @change-month="viewMode = 'month'; selectedOverviewMonth = $event"
+          :record-transactions="recordTransactions"
+          :selected-date="selectedRecordDate"
+          :is-today="isRecordToday"
+          :date-label="recordDateLabel"
+          :form-version="formVersion"
+          :saving="saving"
+          :loading="loading"
+          :busy-id="busyId"
+          :bulk-busy="bulkBusy"
+          :read-only="demoMode"
+          :form-disabled="!isSupabaseConfigured || demoMode"
+          :record-balance="recordBalance"
+          :record-income="recordIncome"
+          :record-expense="recordExpense"
+          :all-balance="allBalance"
+          :all-income="allIncome"
+          :all-expense="allExpense"
+          @previous-day="shiftRecordDate(-1)"
+          @next-day="shiftRecordDate(1)"
+          @today="goToToday"
+          @show-overview="navigateTo('overview')"
+          @submit="saveTransaction"
+          @edit="editTransaction"
+          @delete="deleteTransaction"
+          @bulk-delete="handleBulkDelete"
+          @cancel-selection="selectionMode = false"
+          @open-settings="settingsOpen = true"
         />
 
-        <div class="overview-workspace">
-          <TransactionList
-            class="overview-list"
-            :transactions="displayedTransactions"
-            :loading="loading"
-            :busy-id="busyId"
-            :selection-mode="selectionMode"
-            :bulk-busy="bulkBusy"
-            :read-only="demoMode"
-            :empty-hint="emptyListHint"
-            @edit="editTransaction"
-            @delete="deleteTransaction"
-            @bulk-delete="handleBulkDelete"
-            @cancel-selection="selectionMode = false"
-          />
+        <OverviewPage
+          v-else-if="activePage === 'overview'"
+          key="overview"
+          :transactions="transactions"
+          :filtered-transactions="filteredTransactions"
+          :displayed-transactions="displayedTransactions"
+          :previous-month-transactions="previousMonthTransactions"
+          :selected-month="selectedOverviewMonth"
+          :today-month="todayDate.slice(0, 7)"
+          :view-mode="viewMode"
+          :month-valid="isOverviewMonthValid"
+          :period-label="overviewPeriodLabel"
+          :empty-list-hint="emptyListHint"
+          :balance="balance"
+          :income="income"
+          :expense="expense"
+          :loading="loading"
+          :busy-id="busyId"
+          :bulk-busy="bulkBusy"
+          :selection-mode="selectionMode"
+          :read-only="demoMode"
+          :export-busy="exportBusy"
+          @update:view-mode="viewMode = $event"
+          @update:selected-month="selectedOverviewMonth = $event"
+          @select-day="openRecordDay"
+          @export="handleMonthlyExport"
+          @edit="editTransaction"
+          @delete="deleteTransaction"
+          @bulk-delete="handleBulkDelete"
+          @cancel-selection="selectionMode = false"
+        />
 
-          <div class="overview-analysis">
-            <CashFlowChart class="compact-chart overview-chart" :transactions="transactions" />
-            <div v-if="viewMode === 'month'" class="overview-insights">
-              <ExpenseAnalytics
-                :transactions="filteredTransactions"
-                :previous-transactions="previousMonthTransactions"
-                :month-label="overviewPeriodLabel"
-              />
-            </div>
-
-            <CategoryDonut
-              v-else
-              class="overview-donut"
-              :transactions="filteredTransactions"
-              type="expense"
-              show-type-toggle
-              eyebrow="All-time breakdown"
-              title="สัดส่วนหมวดหมู่ทั้งหมด"
-              empty-hint="เมื่อมีรายการในระบบ ระบบจะแยกสัดส่วนตามหมวดหมู่ให้ทันที"
-            />
-          </div>
-        </div>
-        </section>
-
-        <section v-else key="bubbles" class="app-page bubbles-page">
-          <BubbleGalaxy :transactions="transactions" />
-        </section>
+        <BubblePage v-else key="bubbles" :transactions="transactions" />
       </Transition>
     </main>
 
@@ -1262,306 +1089,6 @@ onMounted(() => void auth.initialize())
   padding-block: 12px 28px;
 }
 
-.app-page {
-  display: block;
-}
-
-.page-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 48px;
-  gap: 14px;
-  padding: 2px 3px 9px;
-}
-
-.page-heading span,
-.overview-title span {
-  color: #71877d;
-  font-size: 0.55rem;
-  font-weight: 800;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-}
-
-.page-heading h1,
-.overview-title h1 {
-  margin: 1px 0 0;
-  color: var(--ink);
-  font-family: 'Noto Sans Thai', sans-serif;
-  font-size: 1rem;
-}
-
-.text-link {
-  padding: 6px 8px;
-  border: 0;
-  color: #356f54;
-  background: transparent;
-  font-family: 'Noto Sans Thai', sans-serif;
-  font-size: 0.65rem;
-  font-weight: 700;
-}
-
-.record-heading-actions {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-
-.day-navigation {
-  display: flex;
-  align-items: center;
-  padding: 3px;
-  border: 1px solid #dce4de;
-  border-radius: 10px;
-  background: #fff;
-  box-shadow: 0 4px 13px rgba(25, 77, 59, 0.05);
-}
-
-.day-navigation button {
-  display: grid;
-  min-width: 30px;
-  height: 30px;
-  place-items: center;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 7px;
-  color: #426454;
-  background: transparent;
-  font-family: 'Noto Sans Thai', sans-serif;
-  font-size: 1.05rem;
-  font-weight: 700;
-  transition: color 0.16s, background 0.16s, transform 0.16s;
-}
-
-.day-navigation button:hover:not(:disabled) {
-  color: #174d36;
-  background: #edf5f0;
-}
-
-.day-navigation .today-jump {
-  min-width: 58px;
-  border-inline: 1px solid #edf0ed;
-  border-radius: 0;
-  font-size: 0.61rem;
-}
-
-.day-navigation button:disabled {
-  opacity: 0.4;
-}
-
-.record-streak {
-  margin: 0 3px 11px;
-}
-
-.overview-heatmap {
-  margin-top: 12px;
-}
-
-.record-grid {
-  display: grid;
-  grid-template-columns: minmax(290px, 0.72fr) minmax(440px, 1.25fr) minmax(285px, 0.7fr);
-  align-items: start;
-  gap: 12px;
-}
-
-.dashboard-form,
-.record-buddy,
-.record-list,
-.record-donut {
-  min-width: 0;
-  height: auto;
-}
-
-.today-column {
-  display: grid;
-  min-width: 0;
-  grid-auto-rows: auto;
-  gap: 10px;
-}
-
-.overview-panel {
-  display: grid;
-  grid-template-columns: minmax(230px, 0.55fr) minmax(560px, 1.45fr);
-  align-items: stretch;
-  gap: 10px;
-  padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow: 0 8px 24px rgba(23, 45, 36, 0.045);
-}
-
-.overview-controls {
-  display: flex;
-  min-width: 0;
-  justify-content: space-between;
-  flex-direction: column;
-  gap: 8px;
-  padding: 4px;
-}
-
-.overview-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.overview-title small {
-  padding: 4px 7px;
-  border-radius: 999px;
-  color: #61796e;
-  background: #edf3ef;
-  font-family: 'Noto Sans Thai', sans-serif;
-  font-size: 0.57rem;
-  white-space: nowrap;
-}
-
-.overview-filter-controls {
-  display: grid;
-  grid-template-columns: minmax(130px, 0.85fr) minmax(150px, 1.15fr);
-  align-items: end;
-  gap: 7px;
-}
-
-.overview-tabs {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  padding: 3px;
-  border-radius: 9px;
-  background: #e9efeb;
-}
-
-.overview-tabs button {
-  min-height: 34px;
-  padding: 4px 7px;
-  border: 0;
-  border-radius: 7px;
-  color: #728078;
-  background: transparent;
-  font-family: 'Noto Sans Thai', sans-serif;
-  font-size: 0.62rem;
-  font-weight: 700;
-}
-
-.overview-tabs button.active {
-  color: #20563e;
-  background: #fff;
-  box-shadow: 0 2px 7px rgba(25, 77, 59, 0.1);
-}
-
-.month-picker {
-  display: grid;
-  min-width: 0;
-  gap: 3px;
-  color: #71877d;
-  font-family: 'Noto Sans Thai', sans-serif;
-  font-size: 0.53rem;
-  font-weight: 700;
-}
-
-.month-picker input {
-  width: 100%;
-  min-width: 0;
-  height: 40px;
-  padding: 6px 9px;
-  border: 1px solid #dce4de;
-  border-radius: 9px;
-  color: #294d3e;
-  background: #fff;
-  font: 600 0.66rem 'Noto Sans Thai', sans-serif;
-  color-scheme: light;
-  outline: none;
-  transition: border-color 0.16s, box-shadow 0.16s;
-}
-
-.month-picker input:focus {
-  border-color: #6d9c83;
-  box-shadow: 0 0 0 3px rgba(73, 137, 103, 0.12);
-}
-
-.export-button {
-  display: flex;
-  grid-column: 1 / -1;
-  min-height: 42px;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  padding: 8px 11px;
-  border: 1px solid #194d3b;
-  border-radius: 10px;
-  color: #fff;
-  background: linear-gradient(135deg, #194d3b, #286b4f);
-  box-shadow: 0 6px 16px rgba(25, 77, 59, 0.16);
-  font-family: 'Noto Sans Thai', sans-serif;
-  font-size: 0.66rem;
-  font-weight: 800;
-  transition: transform 0.16s, box-shadow 0.16s, opacity 0.16s;
-}
-
-.export-button:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 20px rgba(25, 77, 59, 0.22);
-}
-
-.export-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.48;
-  box-shadow: none;
-}
-
-.export-button svg {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.8;
-}
-
-.export-button small {
-  margin-left: auto;
-  padding: 2px 6px;
-  border-radius: 999px;
-  color: #194d3b;
-  background: var(--lime);
-  font-size: 0.52rem;
-  font-weight: 800;
-}
-
-.export-spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  border-top-color: #fff;
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-
-.overview-workspace {
-  display: grid;
-  grid-template-columns: minmax(480px, 1.4fr) minmax(320px, 0.75fr);
-  align-items: start;
-  gap: 12px;
-  margin-top: 12px;
-}
-
-.overview-analysis {
-  display: grid;
-  min-width: 0;
-  gap: 12px;
-}
-
-.overview-insights,
-.overview-list,
-.overview-chart,
-.overview-donut {
-  min-width: 0;
-  height: auto;
-}
-
 .demo-banner {
   display: grid;
   grid-template-columns: 38px minmax(0, 1fr) auto;
@@ -1716,39 +1243,9 @@ onMounted(() => void auth.initialize())
   }
 }
 
-@media (max-width: 1100px) {
-  .record-grid {
-    grid-template-columns: minmax(290px, 0.7fr) minmax(430px, 1.3fr);
-  }
-
-  .record-buddy {
-    grid-column: 1 / -1;
-  }
-
-  .overview-panel {
-    grid-template-columns: 1fr;
-  }
-
-  .overview-controls {
-    display: grid;
-    grid-template-columns: 1fr minmax(260px, 0.7fr);
-    align-items: center;
-  }
-}
-
 @media (max-width: 780px) {
   .dashboard { min-height: auto; }
-  .app-page { flex: none; }
   .page-nav { position: static; transform: none; }
-  .record-grid,
-  .overview-workspace { grid-template-columns: 1fr; }
-  .record-buddy { grid-column: auto; }
-  .dashboard-form,
-  .record-buddy,
-  .record-list,
-  .overview-list,
-  .overview-analysis,
-  .overview-chart { height: auto; }
 }
 
 @media (max-width: 580px) {
@@ -1767,21 +1264,6 @@ onMounted(() => void auth.initialize())
   .page-nav button { flex: 1; justify-content: center; }
   .connection-badge { max-width: 145px; font-size: 0.6rem; }
   .dashboard { padding-top: 9px; }
-  .page-heading { min-height: 44px; }
-  .record-heading { align-items: stretch; flex-direction: column; gap: 7px; }
-  .record-heading-actions { justify-content: space-between; }
-  .day-navigation { flex: 1; }
-  .day-navigation .today-jump { flex: 1; }
-  .overview-panel { gap: 8px; padding: 8px; }
-  .overview-controls { grid-template-columns: 1fr; }
-  .overview-filter-controls { grid-template-columns: 1fr; }
-  .record-grid,
-  .overview-analysis,
-  .overview-workspace,
-  .today-column { gap: 9px; }
-  .overview-workspace { margin-top: 9px; }
-  .overview-heatmap { margin-top: 9px; }
-  .record-streak { margin: 0 1px 9px; }
   .demo-banner { grid-template-columns: 32px minmax(0, 1fr); }
   .demo-banner__icon { width: 32px; height: 32px; border-radius: 9px; }
   .demo-banner button { grid-column: 1 / -1; }

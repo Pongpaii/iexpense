@@ -2,6 +2,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const signInWithPassword = vi.fn()
+const signUp = vi.fn()
 const resetPasswordForEmail = vi.fn()
 
 // ต้อง mock ก่อน import คอมโพเนนต์ เพราะ AuthGate เรียก supabase ตรง ๆ
@@ -10,6 +11,7 @@ vi.mock('../../lib/supabase', () => ({
   supabase: {
     auth: {
       signInWithPassword: (...args: unknown[]) => signInWithPassword(...args),
+      signUp: (...args: unknown[]) => signUp(...args),
       resetPasswordForEmail: (...args: unknown[]) => resetPasswordForEmail(...args),
     },
   },
@@ -31,6 +33,7 @@ const signIn = async (wrapper: GateWrapper, email: string, password: string) => 
 
 beforeEach(() => {
   signInWithPassword.mockReset().mockResolvedValue({ error: null })
+  signUp.mockReset().mockResolvedValue({ error: null })
   resetPasswordForEmail.mockReset().mockResolvedValue({ error: null })
 })
 
@@ -124,6 +127,68 @@ describe('AuthGate', () => {
       await toggle.trigger('click')
 
       expect(wrapper.find('#auth-password').attributes('type')).toBe('text')
+    })
+  })
+
+  describe('Sign up', () => {
+    const openSignUpMode = async (wrapper: GateWrapper) => {
+      const signUpButton = wrapper
+        .findAll('.text-button')
+        .find((button) => button.text().includes('สมัครสมาชิก'))
+      await signUpButton?.trigger('click')
+    }
+
+    const submitSignUp = async (
+      wrapper: GateWrapper,
+      email: string,
+      password: string,
+      confirmation: string,
+    ) => {
+      await wrapper.find('#signup-email').setValue(email)
+      await wrapper.find('#signup-password').setValue(password)
+      await wrapper.find('#signup-confirm-password').setValue(confirmation)
+      await wrapper.find('form').trigger('submit')
+      await flushPromises()
+    }
+
+    it('submits trimmed credentials and shows the confirmation message', async () => {
+      const wrapper = mountGate()
+      await openSignUpMode(wrapper)
+      await submitSignUp(wrapper, '  user@example.com  ', 'secret123', 'secret123')
+
+      expect(signUp).toHaveBeenCalledWith({
+        email: 'user@example.com',
+        password: 'secret123',
+      })
+      expect(wrapper.text()).toContain('สมัครสมาชิกสำเร็จ')
+      expect(wrapper.text()).toContain('ยืนยันบัญชีก่อนเข้าสู่ระบบ')
+    })
+
+    it('shows Thai validation for an invalid trimmed email', async () => {
+      const wrapper = mountGate()
+      await openSignUpMode(wrapper)
+      await submitSignUp(wrapper, '  invalid-email  ', 'secret123', 'secret123')
+
+      expect(signUp).not.toHaveBeenCalled()
+      expect(wrapper.find('[role="alert"]').text()).toContain('กรุณากรอกอีเมลให้ถูกต้อง')
+    })
+
+    it('requires a password with at least eight characters', async () => {
+      const wrapper = mountGate()
+      await openSignUpMode(wrapper)
+      await submitSignUp(wrapper, 'user@example.com', 'short', 'short')
+
+      expect(signUp).not.toHaveBeenCalled()
+      expect(wrapper.find('[role="alert"]').text()).toContain('อย่างน้อย 8 ตัวอักษร')
+    })
+
+    it('requires the confirmation password to match exactly', async () => {
+      const wrapper = mountGate()
+      await openSignUpMode(wrapper)
+      await submitSignUp(wrapper, 'user@example.com', 'secret123', 'Secret123')
+
+      expect(signUp).not.toHaveBeenCalled()
+      expect(wrapper.find('[role="alert"]').text()).toContain('ไม่ตรงกัน')
     })
   })
 

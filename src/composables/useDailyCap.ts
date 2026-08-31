@@ -42,7 +42,7 @@ export interface DailyCapSettings {
 export const MAX_DAILY_CAP = 1_000_000
 export const MAX_PLAN_ITEMS = 10
 
-const STORAGE_KEY = 'money-flow.daily-cap.v1'
+export const DAILY_CAP_STORAGE_KEY = 'money-flow.daily-cap.v1'
 
 /** v1 จับคู่ด้วยเวลาก่อนหมวดหมู่ · v2 ใช้หมวดหมู่คัดกลุ่มก่อน */
 const CURRENT_VERSION = 2
@@ -268,7 +268,7 @@ const loadSettings = (): DailyCapSettings => {
   if (typeof window === 'undefined') return createDefaultSettings()
 
   try {
-    const stored = window.localStorage.getItem(STORAGE_KEY)
+    const stored = window.localStorage.getItem(DAILY_CAP_STORAGE_KEY)
     if (!stored) return createDefaultSettings()
     return parseStored(stored)
   } catch {
@@ -285,16 +285,22 @@ export interface CapSaveResult {
   reason?: 'invalid-cap' | 'invalid-item' | 'invalid-time'
 }
 
+let serverCapSaver: ((value: DailyCapSettings) => void | Promise<void>) | null = null
+
 const persist = (): boolean => {
+  let persisted = false
   try {
     window.localStorage.setItem(
-      STORAGE_KEY,
+      DAILY_CAP_STORAGE_KEY,
       JSON.stringify({ version: CURRENT_VERSION, ...settings.value }),
     )
-    return true
+    persisted = true
   } catch {
-    return false
+    persisted = false
   }
+
+  void serverCapSaver?.(settings.value)
+  return persisted
 }
 
 /** จ.-ศ. คืน 'weekday' · ส.-อา. คืน 'weekend' */
@@ -535,7 +541,7 @@ const resetProfile = (kind: DayKind): CapSaveResult => {
 
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (event) => {
-    if (event.key !== STORAGE_KEY) return
+    if (event.key !== DAILY_CAP_STORAGE_KEY) return
     if (event.newValue === null) {
       settings.value = createDefaultSettings()
       return
@@ -562,6 +568,27 @@ const cloneProfile = (kind: DayKind): DailyCapProfile => ({
   cap: settings.value[kind].cap,
   items: settings.value[kind].items.map(clonePlanItem),
 })
+
+export const applyServerDailyCap = (value: unknown) => {
+  settings.value = normalizeSettings(value)
+  try {
+    window.localStorage.setItem(
+      DAILY_CAP_STORAGE_KEY,
+      JSON.stringify({ version: CURRENT_VERSION, ...settings.value }),
+    )
+  } catch {
+    // Keep the server value in memory when local cache is unavailable.
+  }
+}
+
+export const getDailyCapSnapshot = (): DailyCapSettings =>
+  structuredClone(settings.value)
+
+export const registerServerCapSaver = (
+  saver: ((value: DailyCapSettings) => void | Promise<void>) | null,
+) => {
+  serverCapSaver = saver
+}
 
 export const useDailyCap = () => ({
   capSettings: readonlySettings,

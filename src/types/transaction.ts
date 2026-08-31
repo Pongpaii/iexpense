@@ -27,9 +27,12 @@ export interface Transaction {
   category: TransactionCategory | null
   transaction_date: string
   created_at: string
+  idempotency_key?: string | null
+  deleted_at?: string | null
+  client_timezone?: string | null
 }
 
 export type TransactionInput = Pick<
   Transaction,
   'description' | 'amount' | 'type' | 'category' | 'transaction_date'
->
+> & { client_timezone?: string | null }

@@ -40,7 +40,7 @@ export class OfflineError extends Error {
 export const isOffline = () =>
   typeof navigator !== 'undefined' && navigator.onLine === false
 
-const sleep = (ms: number, signal?: AbortSignal) =>
+export const sleep = (ms: number, signal?: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
     if (signal?.aborted) {
       reject(new DOMException('Aborted', 'AbortError'))

@@ -420,7 +420,7 @@ onBeforeUnmount(() => {
                   role="status"
                 >{{ salaryNotice }}</small>
                 <small v-else id="salary-feedback">
-                  ค่าเริ่มต้น 17,000 บาท · เก็บเฉพาะในเบราว์เซอร์เครื่องนี้
+                  ซิงก์กับบัญชีเมื่อออนไลน์ และเก็บ cache ไว้ในเครื่องสำหรับใช้งานออฟไลน์
                 </small>
               </div>
               <button class="setting-button salary-save" type="submit" :disabled="busy">
@@ -617,7 +617,7 @@ onBeforeUnmount(() => {
                 <small v-else>
                   ค่าเริ่มต้น: วันทำงาน ฿320 · อาหารเช้า 05:00–11:59 (65) · อาหารกลางวัน 12:00–14:59 (70) ·
                   อาหารเย็น 15:00–04:59 (70) · เดินทาง 77 · หมวดอื่น ๆ 38 ·
-                  เก็บเฉพาะในเบราว์เซอร์เครื่องนี้
+                  ซิงก์งบกับบัญชีเมื่อออนไลน์ และเก็บ cache ไว้ในเครื่องสำหรับใช้งานออฟไลน์
                 </small>
               </div>
               <button class="setting-button cap-save" type="submit" :disabled="busy">

@@ -1,5 +1,5 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { describeError, isOffline, isRetryableError, withRetry } from '../lib/api'
+import { describeError, isOffline, isRetryableError, sleep, withRetry } from '../lib/api'
 import { supabase } from '../lib/supabase'
 import type { Transaction, TransactionInput } from '../types/transaction'
 
@@ -23,7 +23,19 @@ export interface QueuedTransaction {
 
 const createQueueId = () => {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
-  return `q_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+
+  // UUID v4 fallback: idempotency_key is a PostgreSQL UUID column.
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (character) => {
+    const random = Math.floor(Math.random() * 16)
+    const value = character === 'x' ? random : (random & 0x3) | 0x8
+    return value.toString(16)
+  })
+}
+
+const errorCode = (error: unknown) => {
+  if (!error || typeof error !== 'object' || !('code' in error)) return ''
+  const code = (error as { code?: unknown }).code
+  return typeof code === 'string' ? code : ''
 }
 
 const readStorage = (): QueuedTransaction[] => {
@@ -94,10 +106,13 @@ export const useOfflineQueue = ({ userId, onSynced }: UseOfflineQueueOptions) =>
       category: item.input.category,
       transaction_date: item.input.transaction_date,
       created_at: new Date(item.queuedAt).toISOString(),
+      idempotency_key: item.queueId,
+      deleted_at: null,
+      client_timezone: item.input.client_timezone ?? null,
     })),
   )
 
-  const enqueue = (input: TransactionInput): boolean => {
+  const enqueue = (input: TransactionInput, queueId = createQueueId()): boolean => {
     const currentUser = userId()
     if (!currentUser) return false
 
@@ -108,7 +123,7 @@ export const useOfflineQueue = ({ userId, onSynced }: UseOfflineQueueOptions) =>
 
     queue.value = [
       ...queue.value,
-      { queueId: createQueueId(), userId: currentUser, input, queuedAt: Date.now() },
+      { queueId, userId: currentUser, input, queuedAt: Date.now() },
     ]
     persist()
     lastError.value = ''
@@ -136,25 +151,32 @@ export const useOfflineQueue = ({ userId, onSynced }: UseOfflineQueueOptions) =>
     const rejected: string[] = []
 
     try {
-      for (const item of batch) {
+      for (const [index, item] of batch.entries()) {
+        if (index > 0) await sleep(200)
+
         const { error } = await withRetry(
           () =>
             client
               .from('transactions')
-              .insert({ ...item.input, user_id: currentUser })
+              .insert({
+                ...item.input,
+                user_id: currentUser,
+                idempotency_key: item.queueId,
+              })
               .select('id')
               .single(),
           { label: 'offline-queue-insert', retries: 1 },
         )
 
-        if (!error) {
+        // A unique violation means a previous timed-out request already committed.
+        if (!error || errorCode(error) === '23505') {
           removeFromQueue(item.queueId)
           synced += 1
           continue
         }
 
-        if (isRetryableError(error)) {
-          // เน็ตหลุดกลางคิว: หยุดไว้ก่อน ที่เหลือรอรอบหน้า
+        if (isRetryableError(error) || ['401', '403', '42501', 'PGRST301'].includes(errorCode(error))) {
+          // Temporary network/auth failures must never discard queued user data.
           lastError.value = describeError(error, 'ซิงก์ข้อมูลออฟไลน์ไม่สำเร็จ')
           break
         }

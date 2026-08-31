@@ -24,6 +24,29 @@ export interface UseTransactionsOptions {
 
 const OFFLINE_EDIT_MESSAGE = 'ออฟไลน์อยู่ แก้ไขรายการไม่ได้ กรุณาลองใหม่เมื่อกลับมาออนไลน์'
 const OFFLINE_DELETE_MESSAGE = 'ออฟไลน์อยู่ ลบรายการไม่ได้ กรุณาลองใหม่เมื่อกลับมาออนไลน์'
+export const SAVE_THROTTLE_MS = 1000
+
+const currentTimezone = () => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null
+  } catch {
+    return null
+  }
+}
+
+const createIdempotencyKey = () => {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (character) => {
+    const random = Math.floor(Math.random() * 16)
+    return (character === 'x' ? random : (random & 0x3) | 0x8).toString(16)
+  })
+}
+
+const errorCode = (error: unknown) => {
+  if (!error || typeof error !== 'object' || !('code' in error)) return ''
+  const code = (error as { code?: unknown }).code
+  return typeof code === 'string' ? code : ''
+}
 
 /**
  * ขนาดหน้าที่ดึงจากเซิร์ฟเวอร์ต่อรอบ
@@ -56,6 +79,9 @@ export const useTransactions = (options: UseTransactionsOptions) => {
   const saving = ref(false)
   const bulkBusy = ref(false)
   const busyId = ref<number | null>(null)
+  const lastSaveTimestamp = ref(0)
+  const serverBalance = ref(0)
+  const monthlySummary = ref({ totalIncome: 0, totalExpense: 0 })
 
   const {
     isOnline,
@@ -133,6 +159,7 @@ export const useTransactions = (options: UseTransactionsOptions) => {
             .eq('user_id', currentUser)
             .order('transaction_date', { ascending: false })
             .order('created_at', { ascending: false })
+            .order('id', { ascending: false })
             .range(from, to),
         { label: `load-transactions:${page}` },
       )
@@ -171,8 +198,96 @@ export const useTransactions = (options: UseTransactionsOptions) => {
     serverTransactions.value = collected
   }
 
+  const loadTransactionsByMonth = async (yearMonth: string): Promise<void> => {
+    const currentUser = options.userId()
+    if (!supabase || !currentUser || !/^\d{4}-(0[1-9]|1[0-2])$/.test(yearMonth)) return
+
+    const monthStart = `${yearMonth}-01`
+    const [year, month] = yearMonth.split('-').map(Number)
+    const nextMonth = `${month === 12 ? year + 1 : year}-${String((month % 12) + 1).padStart(2, '0')}-01`
+    loading.value = true
+    const { data, error } = await withRetry<Transaction[]>(
+      () =>
+        supabase!
+          .from('transactions')
+          .select('*')
+          .eq('user_id', currentUser)
+          .gte('transaction_date', monthStart)
+          .lt('transaction_date', nextMonth)
+          .order('transaction_date', { ascending: false })
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false }),
+      { label: 'load-transactions-by-month' },
+    )
+    loading.value = false
+
+    if (error) {
+      if (!(error instanceof OfflineError) && (await options.handleAuthError(error)) !== 'expired') {
+        options.onError(`โหลดข้อมูลรายเดือนไม่สำเร็จ: ${describeError(error)}`)
+      }
+      return
+    }
+    serverTransactions.value = data ?? []
+  }
+
+  const loadTransactionsByDate = async (isoDate: string): Promise<void> => {
+    const currentUser = options.userId()
+    if (!supabase || !currentUser) return
+
+    loading.value = true
+    const { data, error } = await withRetry<Transaction[]>(
+      () =>
+        supabase!
+          .from('transactions')
+          .select('*')
+          .eq('user_id', currentUser)
+          .eq('transaction_date', isoDate)
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false }),
+      { label: 'load-transactions-by-date' },
+    )
+    loading.value = false
+    if (!error) serverTransactions.value = data ?? []
+    else if (!(error instanceof OfflineError) && (await options.handleAuthError(error)) !== 'expired') {
+      options.onError(`โหลดข้อมูลรายวันไม่สำเร็จ: ${describeError(error)}`)
+    }
+  }
+
+  const loadBalance = async (): Promise<void> => {
+    const currentUser = options.userId()
+    if (!supabase || !currentUser) return
+    const { data, error } = await withRetry<number>(
+      () => supabase!.rpc('get_user_balance', { p_user_id: currentUser }),
+      { label: 'load-balance' },
+    )
+    if (!error) serverBalance.value = Number(data ?? 0)
+  }
+
+  const loadMonthlySummary = async (yearMonth: string): Promise<void> => {
+    const currentUser = options.userId()
+    if (!supabase || !currentUser) return
+    const { data, error } = await withRetry<Array<{ total_income: number; total_expense: number }>>(
+      () => supabase!.rpc('get_monthly_summary', { p_user_id: currentUser, p_month: yearMonth }),
+      { label: 'load-monthly-summary' },
+    )
+    if (!error) {
+      const row = data?.[0]
+      monthlySummary.value = {
+        totalIncome: Number(row?.total_income ?? 0),
+        totalExpense: Number(row?.total_expense ?? 0),
+      }
+    }
+  }
+
   const saveTransaction = async (input: TransactionInput) => {
     if (saving.value) return
+
+    const now = Date.now()
+    if (now - lastSaveTimestamp.value < SAVE_THROTTLE_MS) {
+      options.onError('กรุณารอสักครู่ก่อนบันทึกรายการถัดไป')
+      return
+    }
+
     if (blockedInDemo()) return
     const currentUser = options.userId()
     if (!supabase || !currentUser) return
@@ -185,8 +300,12 @@ export const useTransactions = (options: UseTransactionsOptions) => {
       return
     }
 
-    const payload = validated.data
     const target = editingTransaction.value
+    const operationKey = target ? null : createIdempotencyKey()
+    const payload = target
+      ? validated.data
+      : { ...validated.data, client_timezone: currentTimezone() }
+    lastSaveTimestamp.value = now
 
     // ออฟไลน์: การ "เพิ่ม" เก็บเข้าคิวไว้ก่อนได้ แต่การ "แก้" ต้องมีแถวจริงบนเซิร์ฟเวอร์
     if (isOffline()) {
@@ -195,7 +314,7 @@ export const useTransactions = (options: UseTransactionsOptions) => {
         return
       }
 
-      if (enqueueOffline(payload)) {
+      if (enqueueOffline(payload, operationKey ?? undefined)) {
         formVersion.value += 1
         options.onMessage('ออฟไลน์อยู่ เก็บรายการไว้ในคิวแล้ว ระบบจะซิงก์ให้เมื่อกลับมาออนไลน์')
       }
@@ -218,14 +337,19 @@ export const useTransactions = (options: UseTransactionsOptions) => {
               .select('id')
           : client
               .from('transactions')
-              .insert({ ...payload, user_id: currentUser })
+              .insert({
+                ...payload,
+                user_id: currentUser,
+                idempotency_key: operationKey,
+              })
               .select('id'),
       { label: target ? 'update-transaction' : 'insert-transaction' },
     )
 
     saving.value = false
 
-    if (!error) {
+    const duplicateCommitted = !target && errorCode(error) === '23505'
+    if (!error || duplicateCommitted) {
       options.onMessage(target ? 'แก้ไขรายการเรียบร้อยแล้ว' : 'เพิ่มรายการเรียบร้อยแล้ว')
       editingTransaction.value = null
       formVersion.value += 1
@@ -236,7 +360,7 @@ export const useTransactions = (options: UseTransactionsOptions) => {
 
     // เน็ตหลุดกลางการบันทึกรายการใหม่: ไม่ทิ้งของที่ผู้ใช้พิมพ์มาแล้ว
     if (error instanceof OfflineError && !target) {
-      if (enqueueOffline(payload)) {
+      if (enqueueOffline(payload, operationKey ?? undefined)) {
         formVersion.value += 1
         options.onMessage('เน็ตหลุดตอนบันทึก เก็บรายการไว้ในคิวแล้ว ระบบจะซิงก์ให้ทีหลัง')
       }
@@ -289,10 +413,9 @@ export const useTransactions = (options: UseTransactionsOptions) => {
       () =>
         client
           .from('transactions')
-          .delete()
+          .update({ deleted_at: new Date().toISOString() })
           .eq('id', transaction.id)
-          .eq('user_id', currentUser)
-          .select('id'),
+          .eq('user_id', currentUser),
       { label: 'delete-transaction' },
     )
 
@@ -320,23 +443,12 @@ export const useTransactions = (options: UseTransactionsOptions) => {
     options.clearError()
     const client = supabase
 
-    const { error } = await withRetry(
-      () =>
-        client
-          .from('transactions')
-          .insert({
-            user_id: currentUser,
-            description: transaction.description,
-            amount: transaction.amount,
-            type: transaction.type,
-            category: transaction.category,
-            transaction_date: transaction.transaction_date,
-          })
-          .select('id'),
+    const { data, error } = await withRetry<boolean>(
+      () => client.rpc('restore_transaction', { p_transaction_id: transaction.id }),
       { label: 'undo-delete' },
     )
 
-    if (error) {
+    if (error || data !== true) {
       if ((await options.handleAuthError(error)) !== 'expired') {
         options.onError(`กู้คืนรายการไม่สำเร็จ: ${describeError(error)}`)
       }
@@ -381,10 +493,9 @@ export const useTransactions = (options: UseTransactionsOptions) => {
       () =>
         client
           .from('transactions')
-          .delete()
+          .update({ deleted_at: new Date().toISOString() })
           .eq('user_id', currentUser)
-          .in('id', ids)
-          .select('id'),
+          .in('id', ids),
       { label: 'bulk-delete' },
     )
 
@@ -427,7 +538,12 @@ export const useTransactions = (options: UseTransactionsOptions) => {
     const client = supabase
 
     const { error } = await withRetry(
-      () => client.from('transactions').delete().eq('user_id', currentUser).select('id'),
+      () =>
+        client
+          .from('transactions')
+          .update({ deleted_at: new Date().toISOString() })
+          .eq('user_id', currentUser)
+          .is('deleted_at', null),
       { label: 'reset-transactions' },
     )
 
@@ -462,6 +578,9 @@ export const useTransactions = (options: UseTransactionsOptions) => {
     saving.value = false
     bulkBusy.value = false
     busyId.value = null
+    lastSaveTimestamp.value = 0
+    serverBalance.value = 0
+    monthlySummary.value = { totalIncome: 0, totalExpense: 0 }
     formVersion.value += 1
   }
 
@@ -477,8 +596,14 @@ export const useTransactions = (options: UseTransactionsOptions) => {
     isOnline,
     offlineSyncing,
     offlinePendingCount,
+    serverBalance,
+    monthlySummary,
     isPendingRow,
     loadTransactions,
+    loadTransactionsByMonth,
+    loadTransactionsByDate,
+    loadBalance,
+    loadMonthlySummary,
     saveTransaction,
     editTransaction,
     cancelEdit,

@@ -3,9 +3,9 @@ import { readonly, ref } from 'vue'
 export const DEFAULT_MONTHLY_SALARY = 17_000
 export const SALARY_DAY = 30
 
-const SALARY_STORAGE_KEY = 'money-flow.monthly-salary.v1'
+export const SALARY_STORAGE_KEY = 'money-flow.monthly-salary.v1'
 const SALARY_HIDDEN_STORAGE_KEY = 'money-flow.salary-hidden.v1'
-const MAX_MONTHLY_SALARY = 100_000_000
+export const MAX_MONTHLY_SALARY = 100_000_000
 
 const normalizeSalary = (amount: number) => {
   if (!Number.isFinite(amount) || amount <= 0 || amount > MAX_MONTHLY_SALARY) return null
@@ -45,11 +45,14 @@ export interface PreferenceSaveResult {
   persisted: boolean
 }
 
+let serverSalarySaver: ((amount: number) => void | Promise<void>) | null = null
+
 const saveMonthlySalary = (amount: number): PreferenceSaveResult => {
   const normalizedSalary = normalizeSalary(amount)
   if (normalizedSalary === null) return { ok: false, persisted: false }
 
   monthlySalary.value = normalizedSalary
+  void serverSalarySaver?.(normalizedSalary)
 
   try {
     window.localStorage.setItem(SALARY_STORAGE_KEY, String(normalizedSalary))
@@ -83,6 +86,24 @@ if (typeof window !== 'undefined') {
       salaryHidden.value = event.newValue !== 'false'
     }
   })
+}
+
+export const applyServerSalary = (amount: number) => {
+  const normalized = normalizeSalary(amount)
+  if (normalized === null) return false
+  monthlySalary.value = normalized
+  try {
+    window.localStorage.setItem(SALARY_STORAGE_KEY, String(normalized))
+  } catch {
+    // Keep the server value in memory when local cache is unavailable.
+  }
+  return true
+}
+
+export const registerServerSalarySaver = (
+  saver: ((amount: number) => void | Promise<void>) | null,
+) => {
+  serverSalarySaver = saver
 }
 
 export const useSalarySettings = () => ({
