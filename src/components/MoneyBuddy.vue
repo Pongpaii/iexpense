@@ -5,7 +5,7 @@ import type { Transaction } from '../types/transaction'
 import { createFinancialForecast } from '../utils/forecast'
 import { formatBaht, formatDate } from '../utils/format'
 
-type Mood = 'ready' | 'happy' | 'worried' | 'crying'
+type Mood = 'ready' | 'happy' | 'worried' | 'overwhelmed' | 'crying'
 
 const props = defineProps<{
   income: number
@@ -56,8 +56,10 @@ const mood = computed<Mood>(() => {
   if (props.balance < 0) return 'crying'
   // ข้อมูลยังน้อยเกินกว่าจะตัดสิน อย่าทำให้ผู้ใช้ใหม่ตกใจด้วยเลขที่ยังเชื่อไม่ได้
   if (result.status === 'insufficient') return 'ready'
-  if (result.status === 'risk') return 'crying'
-  if (props.expense > 0 && (props.income <= 0 || spendingRatio.value >= 80)) return 'crying'
+  if (result.status === 'risk') return 'overwhelmed'
+  if (props.expense > 0 && (props.income <= 0 || spendingRatio.value >= 80)) {
+    return 'overwhelmed'
+  }
   if (result.status === 'watch' || spendingRatio.value >= 50) return 'worried'
   return 'happy'
 })
@@ -85,16 +87,16 @@ const forecastMessage = computed(() => {
 
   if (result.status === 'risk') {
     if (result.currentBalance < 0) {
-      return `ยอดคงเหลือติดลบ ${formatBaht(Math.abs(result.currentBalance))} อยู่แล้ว ต้องรีบเบรกรายจ่ายนะ`
+      return `ยอดคงเหลือติดลบ ${formatBaht(Math.abs(result.currentBalance))} แล้วนะ ยังแก้ได้อยู่เลย สู้ๆ!`
     }
     if (result.balanceBeforeSalary < 0) {
-      return `ถ้าใช้เท่าเดิม เงินอาจขาด ${formatBaht(Math.abs(result.balanceBeforeSalary))} ก่อนเงินเดือนรอบหน้า`
+      return 'ถ้าใช้ใกล้เคียงเดิม อาจขาดอีกนิดก่อนเงินเดือนออก ลองดูรายการที่ยืดหยุ่นได้บ้างนะ'
     }
-    return `แนวโน้มอีก 30 วันอาจติดลบ ${formatBaht(Math.abs(result.projectedBalance30Days))} ลองลดรายจ่ายกันนะ`
+    return 'แนวโน้มอีก 30 วัน ยอดอาจลดลงมานิดนึง แต่ยังแก้ได้นะ ค่อยๆ ปรับด้วยกันเลย'
   }
 
   if (result.status === 'watch') {
-    return `ช่วงนี้ใช้เฉลี่ย ${formatBaht(result.averageDailyExpense)} ต่อวัน ลองชะลอรายจ่ายที่ไม่จำเป็นนะ`
+    return `ช่วงนี้ใช้เฉลี่ย ${formatBaht(result.averageDailyExpense)} ต่อวัน น้องเห็นแล้วนะ ลองดูรายการที่รอได้ด้วยกันไหม`
   }
 
   return `ถ้าใช้จ่ายใกล้เคียงเดิม ก่อนเงินเดือนเข้าคาดว่าจะเหลือ ${formatBaht(result.balanceBeforeSalary)}`
@@ -108,18 +110,28 @@ const messages = computed<Record<Mood, string[]>>(() => ({
   ],
   happy: [
     forecastMessage.value,
-    'เก่งมาก! แนวโน้มการเงินยังอยู่ในระดับสบายใจ',
+    'เก่งมาก! แนวโน้มการเงินยังอยู่ในระดับสบายใจ 🎉',
     `ยอดคงเหลือถึงวันนี้ ${formatBaht(forecast.value.currentBalance)} รักษาจังหวะนี้ไว้นะ`,
+    'บันทึกครบ วางแผนได้ดี น้องภูมิใจแทนเลย!',
   ],
   worried: [
     forecastMessage.value,
-    'ก่อนซื้อครั้งหน้า ลองรอ 10 นาทีแล้วถามตัวเองอีกที',
-    'ลองดูรายการย้อนหลัง อาจมีค่าใช้จ่ายที่ลดได้',
+    'ไม่เป็นไรนะ ลองดูรายการย้อนหลังด้วยกันไหม อาจมีบางอย่างที่ตัดออกได้',
+    'ก่อนซื้อครั้งหน้า ลองถามตัวเองว่า “ต้องการจริงๆ ไหม” ได้ผลมากเลย',
+    'น้องอยู่ตรงนี้ ค่อยๆ ปรับด้วยกันได้เลย',
+  ],
+  overwhelmed: [
+    forecastMessage.value,
+    'เดือนนี้ใช้เยอะหน่อย แต่โอเคนะ ทุกคนก็มีช่วงแบบนี้ 💪',
+    'ไม่ต้องโทษตัวเองนะ แค่รู้แล้วก็ดีกว่าไม่รู้เยอะเลย',
+    'ลองดูว่ามีรายการไหนที่เดือนหน้าลดได้บ้าง ทีละนิดก็ช่วยได้นะ',
+    'น้องเชื่อว่าเดือนหน้าจะดีขึ้นแน่ๆ!',
   ],
   crying: [
     forecastMessage.value,
-    'พักซื้อของที่ไม่จำเป็นก่อน น้องเป็นห่วง!',
-    'ลองตั้งเป้าลดค่าใช้จ่ายเฉลี่ยต่อวันกันนะ',
+    'น้องเป็นห่วงนะ แต่ยังแก้ได้อยู่เลย อย่าเพิ่งกังวลมาก',
+    'ค่อยๆ ดูทีละรายการ บางทีแค่งดของไม่จำเป็นก็ช่วยได้เยอะนะ',
+    'น้องอยู่ตรงนี้ เดินผ่านช่วงนี้ไปด้วยกันได้เลย 🤝',
   ],
 }))
 
@@ -132,16 +144,17 @@ const statusLabel = computed(() => {
   if (mood.value === 'ready') {
     return forecast.value.hasSpendingData ? 'กำลังเรียนรู้' : 'รอข้อมูลแรก'
   }
-  if (mood.value === 'happy') return 'บริหารได้ดี'
-  if (mood.value === 'worried') return 'ควรเฝ้าดู'
-  return 'เสี่ยงเงินไม่พอ'
+  if (mood.value === 'happy') return 'สบายดี'
+  if (mood.value === 'worried') return 'มีเรื่องบอก'
+  if (mood.value === 'overwhelmed') return 'สู้ๆ นะ'
+  return 'ยากนิดนึง'
 })
 
 const forecastStatusLabel = computed(() => {
   if (forecast.value.status === 'insufficient') return 'กำลังเรียนรู้'
-  if (forecast.value.status === 'safe') return 'แนวโน้มดี'
-  if (forecast.value.status === 'watch') return 'ควรระวัง'
-  return 'มีความเสี่ยง'
+  if (forecast.value.status === 'safe') return 'แนวโน้มสบายใจ'
+  if (forecast.value.status === 'watch') return 'ค่อยๆ ดูกัน'
+  return 'ยังปรับได้'
 })
 
 const forecastConfidenceLabel = computed(() => {
@@ -160,31 +173,31 @@ const forecastAdvice = computed(() => {
   const result = forecast.value
 
   if (!result.hasSpendingData) {
-    return 'ยังไม่มีข้อมูลรายจ่ายใน 90 วันที่ผ่านมา บันทึกรายจ่ายเพิ่มแล้วน้องจะปรับการคาดการณ์ให้อัตโนมัติ'
+    return 'บันทึกรายจ่ายเพิ่มอีกนิดนึงแล้วน้องจะวิเคราะห์แนวโน้มให้ได้เลยนะ!'
   }
 
   if (result.status === 'insufficient') {
     return result.hasFullCycleData
-      ? 'ข้อมูลครบหนึ่งรอบแล้วแต่รายการยังน้อย บันทึกต่อไปอีกหน่อยน้องจะเริ่มเตือนแนวโน้มให้'
-      : 'ค่าเฉลี่ยช่วงต้นรอบจะเหวี่ยงจากรายจ่ายก้อนใหญ่อย่างค่าหอ น้องจึงยังไม่สรุปจนกว่าจะเห็นข้อมูลครบรอบ'
+      ? 'ข้อมูลครบรอบแล้ว แต่ยังน้อยอยู่ บันทึกต่อไปแล้วน้องจะแม่นขึ้นเรื่อยๆ นะ'
+      : 'ค่าเฉลี่ยช่วงต้นรอบอาจคลาดเคลื่อนได้นะ รอให้ครบรอบก่อนแล้วจะแม่นขึ้นเอง'
   }
 
   if (result.status === 'risk') {
     if (result.safeDailyBudget !== null) {
-      return `เพื่อให้ถึงวันเงินเดือนออก ควรใช้ไม่เกินประมาณ ${formatBaht(result.safeDailyBudget)} ต่อวัน`
+      return `ถ้าลองคุมวันละประมาณ ${formatBaht(result.safeDailyBudget)} น่าจะพอถึงวันเงินเดือนออกได้สบายๆ นะ!`
     }
-    return 'ยอดคาดการณ์มีโอกาสติดลบ ควรชะลอรายจ่ายและตรวจรายการที่ลดได้ก่อน'
+    return 'ลองดูรายการที่ลดได้ก่อนนะ บางทีแค่ไม่กี่รายการก็ทำให้เบาขึ้นเยอะเลย'
   }
 
   if (result.status === 'watch') {
     const monthlyTrend = result.averageDailyExpense * 30
     if (monthlyTrend > result.monthlySalary) {
-      return `แนวโน้มรายจ่าย 30 วันสูงกว่าเงินเดือนประมาณ ${formatBaht(monthlyTrend - result.monthlySalary)}`
+      return `แนวโน้ม 30 วันสูงกว่าเงินเดือนประมาณ ${formatBaht(monthlyTrend - result.monthlySalary)} ลองดูรายการที่ไม่ด่วนก่อนนะ`
     }
-    return 'รายจ่ายเฉลี่ยเริ่มใกล้งบที่ใช้ได้ต่อวัน ลองเว้นรายจ่ายที่ไม่จำเป็นบางรายการ'
+    return 'รายจ่ายเริ่มใกล้งบนิดนึง ไม่มีอะไรน่าตกใจนะ แค่ลองเว้นรายการที่รอได้ก็ช่วยได้มากเลย'
   }
 
-  return `หลังเงินเดือนรอบหน้าเข้า คาดว่าจะมี ${formatBaht(result.balanceAfterSalary)} หากพฤติกรรมการใช้เงินใกล้เคียงเดิม`
+  return `หลังเงินเดือนรอบหน้าเข้า คาดว่าจะมี ${formatBaht(result.balanceAfterSalary)} ถ้าพฤติกรรมใกล้เคียงเดิม 👍`
 })
 
 const progressWidth = computed(() => `${Math.min(spendingRatio.value, 100)}%`)
@@ -291,6 +304,16 @@ onBeforeUnmount(() => {
             <ellipse class="eye" cx="89" cy="122" rx="5" ry="7" />
             <ellipse class="eye" cx="128" cy="122" rx="5" ry="7" />
             <path class="mouth-line" d="M96 151c7-7 18-7 25 0" />
+          </template>
+
+          <template v-else-if="mood === 'overwhelmed'">
+            <path class="brow" d="M80 110l16 3" />
+            <path class="brow" d="M137 110l-16 3" />
+            <ellipse class="eye" cx="89" cy="122" rx="5" ry="7" />
+            <ellipse class="eye" cx="128" cy="122" rx="5" ry="7" />
+            <path class="mouth-line" d="M97 146c5 5 18 5 23 0" />
+            <circle class="cheek" cx="78" cy="139" r="5" opacity="0.5" />
+            <circle class="cheek" cx="139" cy="139" r="5" opacity="0.5" />
           </template>
 
           <template v-else-if="mood === 'crying'">
@@ -443,6 +466,11 @@ onBeforeUnmount(() => {
   background: linear-gradient(125deg, #fffdf6, #fff8dc);
 }
 
+.buddy-card--overwhelmed {
+  border-color: #e8d5c4;
+  background: linear-gradient(125deg, #fffcf8, #fff5eb);
+}
+
 .buddy-card--crying {
   border-color: #d5e2ed;
   background: linear-gradient(125deg, #f8fbfd, #e8f1f7);
@@ -494,6 +522,15 @@ onBeforeUnmount(() => {
 
 .buddy-card--worried .mood-badge i {
   background: #d0a52c;
+}
+
+.buddy-card--overwhelmed .mood-badge {
+  color: #8b5e3c;
+  background: rgba(200, 130, 70, 0.12);
+}
+
+.buddy-card--overwhelmed .mood-badge i {
+  background: #d4844a;
 }
 
 .buddy-card--crying .mood-badge {
