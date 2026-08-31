@@ -5,7 +5,7 @@ import { createFinancialForecast, FORECAST_HORIZON_DAYS } from '../forecast'
 const TODAY = '2026-03-15'
 
 /** รายจ่ายรายวันติดต่อกัน `days` วัน โดยวันสุดท้ายคือวันนี้ */
-const dailyExpensesEndingToday = (days: number, amount: number) =>
+const dailyExpensesEndingToday = (days: number, amount: number, category: string = 'อาหาร') =>
   Array.from({ length: days }, (_, index) => {
     const date = new Date(`${TODAY}T12:00:00`)
     date.setDate(date.getDate() - index)
@@ -13,7 +13,7 @@ const dailyExpensesEndingToday = (days: number, amount: number) =>
       date.getDate(),
     ).padStart(2, '0')}`
 
-    return makeTransaction({ type: 'expense', amount, transaction_date: iso })
+    return makeTransaction({ type: 'expense', amount, transaction_date: iso, category: category as any })
   })
 
 const forecastFor = (
@@ -93,7 +93,7 @@ describe('createFinancialForecast', () => {
     it('ถ่วงค่าเฉลี่ยเข้าหาค่าอ้างอิงจากเงินเดือนเมื่อข้อมูลน้อย', () => {
       // จ่ายก้อนใหญ่ครั้งเดียวเมื่อวาน ค่าเฉลี่ยดิบจะสูงเกินจริงมาก
       const transactions = [
-        makeTransaction({ type: 'expense', amount: 6_000, transaction_date: '2026-03-14' }),
+        makeTransaction({ type: 'expense', amount: 6_000, transaction_date: '2026-03-14', category: 'อาหาร' }),
       ]
 
       const forecast = forecastFor(transactions)
@@ -137,6 +137,63 @@ describe('createFinancialForecast', () => {
 
     it('ความมั่นใจปานกลางเมื่อข้อมูลครอบคลุมราวสองสัปดาห์', () => {
       expect(forecastFor(dailyExpensesEndingToday(20, 300)).confidence).toBe('medium')
+    })
+  })
+
+  describe('แยกค่าเฉลี่ย daily essentials กับ irregular', () => {
+    it('หมวดอาหารและเดินทางถูกคิดเป็นค่าเฉลี่ยต่อวัน', () => {
+      const transactions = dailyExpensesEndingToday(30, 200, 'อาหาร')
+
+      const forecast = forecastFor(transactions)
+
+      expect(forecast.observedDailyEssential).toBeCloseTo(200)
+      expect(forecast.observedDailyIrregular).toBeCloseTo(0)
+    })
+
+    it('หมวดอื่นถูกคิดเป็นค่าเฉลี่ยต่อเดือนแล้วหาร 30', () => {
+      // ช้อปปิ้ง 3000 ครั้งเดียวใน 30 วัน → 3000/เดือน → 100/วัน
+      const transactions = [
+        ...dailyExpensesEndingToday(30, 0, 'อาหาร'), // dummy records to span 30 days
+        makeTransaction({
+          type: 'expense', amount: 3_000, category: 'ช้อปปิ้ง',
+          transaction_date: '2026-03-10',
+        }),
+      ].filter(t => t.amount > 0)
+
+      const forecast = forecastFor(transactions)
+
+      expect(forecast.observedDailyIrregular).toBeCloseTo(100)
+    })
+
+    it('irregular ไม่ inflate เกินจริงเมื่อข้อมูลน้อยกว่า 30 วัน', () => {
+      // ช้อปปิ้ง 3000 ใน 5 วัน → สูตรเดิม: 600/วัน → สูตรใหม่: 100/วัน
+      const transactions = [
+        ...dailyExpensesEndingToday(5, 200, 'อาหาร'),
+        makeTransaction({
+          type: 'expense', amount: 3_000, category: 'ช้อปปิ้ง',
+          transaction_date: '2026-03-14',
+        }),
+      ]
+
+      const forecast = forecastFor(transactions, { monthlySalary: 0 })
+
+      // Daily: 200/วัน (อาหาร)
+      expect(forecast.observedDailyEssential).toBeCloseTo(200)
+      // Irregular: clamp เป็น 1 เดือน → 3000/30 = 100/วัน (ไม่ใช่ 3000/5 = 600)
+      expect(forecast.observedDailyIrregular).toBeCloseTo(100)
+      // รวม: 300 ไม่ใช่ 800 (สูตรเดิม: (1000+3000)/5 = 800)
+      expect(forecast.observedDailyExpense).toBeCloseTo(300)
+    })
+
+    it('expense ที่ไม่มี category ถูกจัดเป็น irregular', () => {
+      const transactions = [
+        makeTransaction({ type: 'expense', amount: 600, transaction_date: '2026-03-14', category: null }),
+      ]
+
+      const forecast = forecastFor(transactions, { monthlySalary: 0 })
+
+      expect(forecast.observedDailyEssential).toBe(0)
+      expect(forecast.observedDailyIrregular).toBeCloseTo(600 / 30) // clamp เป็น 1 เดือน
     })
   })
 

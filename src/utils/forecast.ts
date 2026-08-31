@@ -1,4 +1,5 @@
 import type { Transaction } from '../types/transaction'
+import type { TransactionCategory } from '../types/transaction'
 
 export const FORECAST_HORIZON_DAYS = 30
 export const FORECAST_HISTORY_DAYS = 90
@@ -6,6 +7,16 @@ export const FORECAST_HISTORY_DAYS = 90
 const MILLISECONDS_PER_DAY = 86_400_000
 const SALARY_EARLY_WINDOW_DAYS = 3
 const SALARY_LATE_WINDOW_DAYS = 1
+
+/**
+ * หมวดหมู่ที่เกิดขึ้นเป็นประจำทุกวัน (daily essentials)
+ * ใช้คำนวณค่าเฉลี่ยต่อวันโดยตรง ส่วนหมวดอื่นจะคิดเป็นค่าเฉลี่ยต่อเดือนแทน
+ * เพื่อไม่ให้รายจ่ายก้อนใหญ่ที่ไม่ได้เกิดทุกวัน (เช่น ช้อปปิ้ง) ดึงค่าเฉลี่ยให้สูงเกินจริง
+ */
+const DAILY_CATEGORIES: TransactionCategory[] = [
+  'อาหาร',
+  'การเดินทาง',
+]
 
 /** จำนวนวันและจำนวนรายการที่ต้องมี ก่อนจะเชื่อค่าเฉลี่ยที่สังเกตได้เต็มร้อย */
 const FULL_TRUST_DAYS = 30
@@ -19,6 +30,10 @@ export interface FinancialForecast {
   averageDailyExpense: number
   /** ค่าเฉลี่ยดิบจากข้อมูลที่บันทึกไว้ ยังไม่ผสมอะไร */
   observedDailyExpense: number
+  /** ค่าเฉลี่ยดิบเฉพาะหมวด daily (อาหาร, เดินทาง) ต่อวัน */
+  observedDailyEssential: number
+  /** ค่าเฉลี่ยดิบเฉพาะหมวด irregular ต่อวัน (คิดจาก monthly ÷ 30) */
+  observedDailyIrregular: number
   /** ค่าอ้างอิงตอนข้อมูลน้อย คิดจากเงินเดือนหารจำนวนวันในรอบ */
   priorDailyExpense: number
   /** น้ำหนักที่ให้กับข้อมูลจริง 0-1 ยิ่งใกล้ 1 ยิ่งเชื่อข้อมูลที่บันทึกไว้ */
@@ -170,7 +185,33 @@ export const createFinancialForecast = ({
     : 0
   const expenseRecordCount = recentExpenses.length
   const hasSpendingData = expenseRecordCount > 0 && historyDays > 0
-  const observedDailyExpense = hasSpendingData ? observedExpense / historyDays : 0
+
+  // --- แยก expense เป็น daily essentials vs irregular ---
+  const dailyExpenses = recentExpenses.filter(({ transaction }) =>
+    transaction.category != null && DAILY_CATEGORIES.includes(transaction.category),
+  )
+  const irregularExpenses = recentExpenses.filter(({ transaction }) =>
+    transaction.category == null || !DAILY_CATEGORIES.includes(transaction.category),
+  )
+
+  const dailyTotal = dailyExpenses.reduce((sum, { amount }) => sum + amount, 0)
+  const irregularTotal = irregularExpenses.reduce((sum, { amount }) => sum + amount, 0)
+
+  // Daily essentials → หารด้วยจำนวนวัน (เกิดทุกวัน)
+  const observedDailyEssential = hasSpendingData ? dailyTotal / historyDays : 0
+
+  // Irregular → คิดเป็นค่าเฉลี่ยต่อ "เดือน" ก่อน แล้วหาร 30 กลับมาเป็นรายวัน
+  // เมื่อ historyDays < 30 จะ clamp เป็น 1 เดือน เพื่อไม่ให้รายจ่ายก้อนใหญ่ที่
+  // เกิดครั้งเดียว (เช่น ช้อปปิ้ง) ถูกหารด้วยจำนวนวันน้อยแล้วดึงค่าเฉลี่ยให้สูงเกินจริง
+  // เช่น ช้อปปิ้ง ฿3,000 ใน 5 วัน → สูตรเดิม: 600/วัน → สูตรใหม่: 100/วัน (3000/เดือน)
+  const historyMonths = Math.max(historyDays / 30, 1)
+  const observedMonthlyIrregular = irregularTotal / historyMonths
+  const observedDailyIrregular = hasSpendingData ? observedMonthlyIrregular / 30 : 0
+
+  // รวม daily + irregular เป็นค่าเฉลี่ยต่อวันที่แม่นกว่าเดิม
+  // ผลต่างจากสูตรเดิม: เมื่อ historyDays < 30 irregular จะไม่ถูก inflate
+  // เมื่อ historyDays ≥ 30 ผลจะเท่าเดิมทุกประการ
+  const observedDailyExpense = observedDailyEssential + observedDailyIrregular
 
   // ตอนข้อมูลน้อย ค่าเฉลี่ยดิบเหวี่ยงแรงมาก เช่น จ่ายค่าหอวันที่ 1 แล้วดูวันที่ 3
   // จะได้หลักพันต่อวัน จึงถ่วงเข้าหาค่าอ้างอิงจากเงินเดือน แล้วค่อยเชื่อข้อมูลจริง
@@ -328,6 +369,8 @@ export const createFinancialForecast = ({
   return {
     averageDailyExpense,
     observedDailyExpense,
+    observedDailyEssential,
+    observedDailyIrregular,
     priorDailyExpense,
     estimateWeight,
     isEstimateBlended: hasSpendingData && estimateWeight < 1,
