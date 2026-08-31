@@ -3,7 +3,7 @@ import { withSetup } from '../../test-utils/withSetup'
 import type { TransactionInput } from '../../types/transaction'
 
 const insertResults: Array<{ data: unknown; error: unknown }> = []
-const insert = vi.fn((payload: unknown) => {
+const insert = vi.fn((_payload: unknown) => {
   const result = insertResults.shift() ?? { data: { id: 1 }, error: null }
   const chain = {
     select: vi.fn(() => chain),
@@ -14,7 +14,7 @@ const insert = vi.fn((payload: unknown) => {
 const from = vi.fn(() => ({ insert }))
 
 vi.mock('../../lib/supabase', () => ({
-  supabase: { from: (...args: unknown[]) => from(...args) },
+  supabase: { from },
 }))
 
 vi.mock('../../lib/api', () => ({

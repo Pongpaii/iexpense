@@ -3,14 +3,17 @@ import { ref } from 'vue'
 import { makeTransaction } from '../../test-utils/factories'
 import type { TransactionInput } from '../../types/transaction'
 
+type QueryChain = Record<string, ReturnType<typeof vi.fn>> & PromiseLike<unknown>
+
 const queryResult = { data: [] as unknown[], error: null as unknown }
 const rpcResult = { data: true as unknown, error: null as unknown }
-const chains: Array<Record<string, ReturnType<typeof vi.fn>>> = []
+const chains: QueryChain[] = []
 const rpc = vi.fn(() => Promise.resolve(rpcResult))
 const from = vi.fn(() => {
-  const chain: Record<string, ReturnType<typeof vi.fn>> & PromiseLike<unknown> = {
-    then: (resolve, reject) => Promise.resolve(queryResult).then(resolve, reject),
-  } as Record<string, ReturnType<typeof vi.fn>> & PromiseLike<unknown>
+  const chain = {
+    then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) =>
+      Promise.resolve(queryResult).then(resolve, reject),
+  } as unknown as QueryChain
   for (const method of ['select', 'eq', 'gte', 'lt', 'order', 'range', 'insert', 'update']) {
     chain[method] = vi.fn(() => chain)
   }
@@ -19,7 +22,7 @@ const from = vi.fn(() => {
 })
 
 vi.mock('../../lib/supabase', () => ({
-  supabase: { from: (...args: unknown[]) => from(...args), rpc: (...args: unknown[]) => rpc(...args) },
+  supabase: { from, rpc },
 }))
 
 vi.mock('../../lib/api', () => {

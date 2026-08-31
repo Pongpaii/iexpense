@@ -176,12 +176,14 @@ export function useServerSettings(userId: () => string | null) {
     return upsertPatch({ daily_cap_json: settings })
   }
 
-  registerServerSalarySaver(saveSalary)
+  registerServerSalarySaver(async (amount) => {
+    await saveSalary(amount)
+  })
   let capSaveQueue = Promise.resolve<boolean>(true)
-  registerServerCapSaver((settings) => {
+  registerServerCapSaver(async (settings) => {
     const snapshot = structuredClone(settings)
     capSaveQueue = capSaveQueue.then(() => saveCapSettings(snapshot))
-    return capSaveQueue
+    await capSaveQueue
   })
 
   return {

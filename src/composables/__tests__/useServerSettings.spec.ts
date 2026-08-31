@@ -11,7 +11,7 @@ const select = vi.fn(() => ({ eq }))
 const from = vi.fn(() => ({ select, upsert }))
 
 vi.mock('../../lib/supabase', () => ({
-  supabase: { from: (...args: unknown[]) => from(...args) },
+  supabase: { from },
 }))
 
 vi.mock('../../lib/api', () => ({
