@@ -3,6 +3,7 @@ import { describeError, isOffline, withRetry } from '../lib/api'
 import { supabase } from '../lib/supabase'
 import {
   applyServerDailyCap,
+  cloneDailyCapSettings,
   DAILY_CAP_STORAGE_KEY,
   getDailyCapSnapshot,
   registerServerCapSaver,
@@ -161,7 +162,7 @@ export function useServerSettings(userId: () => string | null) {
   }
 
   const saveCapSettings = async (settings: DailyCapSettings) => {
-    serverCapJson.value = structuredClone(settings)
+    serverCapJson.value = cloneDailyCapSettings(settings)
     const currentUser = userId()
     if (currentUser) {
       try {
@@ -181,7 +182,7 @@ export function useServerSettings(userId: () => string | null) {
   })
   let capSaveQueue = Promise.resolve<boolean>(true)
   registerServerCapSaver(async (settings) => {
-    const snapshot = structuredClone(settings)
+    const snapshot = cloneDailyCapSettings(settings)
     capSaveQueue = capSaveQueue.then(() => saveCapSettings(snapshot))
     await capSaveQueue
   })

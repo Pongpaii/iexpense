@@ -88,6 +88,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers()
+  vi.unstubAllGlobals()
 })
 
 describe('useTransactions', () => {
@@ -122,7 +123,7 @@ describe('useTransactions', () => {
   })
 
   it('ลบแบบ soft delete และนำรายการออกจาก state หลังสำเร็จ', async () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.stubGlobal('confirm', vi.fn(() => true))
     const transaction = makeTransaction({ id: 42 })
     const { result, callbacks } = createSubject()
     result.setTransactions([transaction])
@@ -135,7 +136,6 @@ describe('useTransactions', () => {
     expect(chain.eq).toHaveBeenCalledWith('user_id', 'user-1')
     expect(result.transactions.value).toEqual([])
     expect(callbacks.onDeleted).toHaveBeenCalledWith(transaction)
-    confirm.mockRestore()
   })
 
   it('กู้คืนผ่าน RPC เพราะแถวที่ถูกลบมองไม่เห็นจาก query ปกติ แล้วโหลดรายการใหม่', async () => {

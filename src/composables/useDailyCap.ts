@@ -581,8 +581,20 @@ export const applyServerDailyCap = (value: unknown) => {
   }
 }
 
+export const cloneDailyCapSettings = (value: DailyCapSettings): DailyCapSettings => ({
+  enabled: value.enabled,
+  weekday: {
+    cap: value.weekday.cap,
+    items: value.weekday.items.map(clonePlanItem),
+  },
+  weekend: {
+    cap: value.weekend.cap,
+    items: value.weekend.items.map(clonePlanItem),
+  },
+})
+
 export const getDailyCapSnapshot = (): DailyCapSettings =>
-  structuredClone(settings.value)
+  cloneDailyCapSettings(settings.value)
 
 export const registerServerCapSaver = (
   saver: ((value: DailyCapSettings) => void | Promise<void>) | null,
