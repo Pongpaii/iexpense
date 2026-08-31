@@ -288,7 +288,7 @@ export interface CapSaveResult {
 let serverCapSaver: ((value: DailyCapSettings) => void | Promise<void>) | null = null
 
 const persist = (): boolean => {
-  let persisted = false
+  let persisted: boolean
   try {
     window.localStorage.setItem(
       DAILY_CAP_STORAGE_KEY,
