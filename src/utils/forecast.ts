@@ -175,7 +175,6 @@ export const createFinancialForecast = ({
     dayNumber >= historyStartNumber &&
     dayNumber <= todayNumber,
   )
-  const observedExpense = recentExpenses.reduce((sum, { amount }) => sum + amount, 0)
   const earliestExpense = recentExpenses.reduce<DatedTransaction | null>((earliest, item) => {
     if (!earliest || item.dayNumber < earliest.dayNumber) return item
     return earliest

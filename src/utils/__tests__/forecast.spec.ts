@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { makeTransaction } from '../../test-utils/factories'
+import type { TransactionCategory } from '../../types/transaction'
 import { createFinancialForecast, FORECAST_HORIZON_DAYS } from '../forecast'
 
 const TODAY = '2026-03-15'
 
 /** รายจ่ายรายวันติดต่อกัน `days` วัน โดยวันสุดท้ายคือวันนี้ */
-const dailyExpensesEndingToday = (days: number, amount: number, category: string = 'อาหาร') =>
+const dailyExpensesEndingToday = (
+  days: number,
+  amount: number,
+  category: TransactionCategory = 'อาหาร',
+) =>
   Array.from({ length: days }, (_, index) => {
     const date = new Date(`${TODAY}T12:00:00`)
     date.setDate(date.getDate() - index)
@@ -13,7 +18,7 @@ const dailyExpensesEndingToday = (days: number, amount: number, category: string
       date.getDate(),
     ).padStart(2, '0')}`
 
-    return makeTransaction({ type: 'expense', amount, transaction_date: iso, category: category as any })
+    return makeTransaction({ type: 'expense', amount, transaction_date: iso, category })
   })
 
 const forecastFor = (
@@ -151,17 +156,25 @@ describe('createFinancialForecast', () => {
     })
 
     it('หมวดอื่นถูกคิดเป็นค่าเฉลี่ยต่อเดือนแล้วหาร 30', () => {
-      // ช้อปปิ้ง 3000 ครั้งเดียวใน 30 วัน → 3000/เดือน → 100/วัน
+      // รายจ่าย irregular รวม 3,000 บาท ครอบคลุม 30 วัน → 3,000/เดือน → 100/วัน
       const transactions = [
-        ...dailyExpensesEndingToday(30, 0, 'อาหาร'), // dummy records to span 30 days
         makeTransaction({
-          type: 'expense', amount: 3_000, category: 'ช้อปปิ้ง',
-          transaction_date: '2026-03-10',
+          type: 'expense',
+          amount: 1_500,
+          category: 'ช้อปปิ้ง',
+          transaction_date: TODAY,
         }),
-      ].filter(t => t.amount > 0)
+        makeTransaction({
+          type: 'expense',
+          amount: 1_500,
+          category: 'ช้อปปิ้ง',
+          transaction_date: '2026-02-14',
+        }),
+      ]
 
       const forecast = forecastFor(transactions)
 
+      expect(forecast.historyDays).toBe(30)
       expect(forecast.observedDailyIrregular).toBeCloseTo(100)
     })
 
