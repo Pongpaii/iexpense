@@ -94,18 +94,43 @@ const resolveUserId = async () => {
   return data.session?.user.id ?? null
 }
 
-/** คอลัมน์ยังไม่มีในฐานข้อมูล = ยังไม่ได้รัน migration ไม่ใช่ error ที่ผู้ใช้แก้ได้ */
-const isMissingColumnError = (error: unknown) => {
-  if (!error || typeof error !== 'object') return false
+/**
+ * แยก error ที่เกิดจาก "ฐานข้อมูลยังไม่พร้อม" ออกจาก error ทั่วไป
+ *
+ * PGRST205/42P01 = ไม่มีตาราง (ยังไม่ได้รัน schema.sql)
+ * PGRST204/42703 = มีตารางแต่ไม่มีคอลัมน์ (ยังไม่ได้รัน migration งบรายหมวด)
+ * ทั้งสองกรณีผู้ใช้กดซ้ำกี่ครั้งก็ไม่หาย ต้องบอกให้ไปรัน SQL
+ */
+const readSchemaGap = (error: unknown): 'table' | 'column' | null => {
+  if (!error || typeof error !== 'object') return null
+
   const { code, message } = error as { code?: unknown; message?: unknown }
-  if (code === '42703') return true
-  return typeof message === 'string' && message.includes('category_budgets_json')
+  const text = typeof message === 'string' ? message.toLowerCase() : ''
+
+  if (code === 'PGRST205' || code === '42P01') return 'table'
+  if (text.includes('could not find the table')) return 'table'
+  if (text.includes('relation') && text.includes('does not exist')) return 'table'
+
+  if (code === 'PGRST204' || code === '42703') return 'column'
+  if (text.includes('category_budgets_json')) return 'column'
+
+  return null
+}
+
+const SCHEMA_GAP_MESSAGES: Record<'table' | 'column', string> = {
+  table:
+    'ฐานข้อมูลยังไม่มีตาราง user_settings จึงเก็บงบไว้ในเครื่องได้เท่านั้น '
+    + 'ให้รัน supabase/schema.sql บน Supabase SQL Editor ก่อน (ดูหัวข้อเตรียมฐานข้อมูลใน README)',
+  column:
+    'ฐานข้อมูลยังไม่มีคอลัมน์ category_budgets_json จึงเก็บงบไว้ในเครื่องได้เท่านั้น '
+    + 'ให้รัน migration 20260902000100_add_category_budgets.sql ก่อน',
 }
 
 const handleError = (error: unknown, fallback: string) => {
-  if (isMissingColumnError(error)) {
+  const gap = readSchemaGap(error)
+  if (gap) {
     needsMigration.value = true
-    errorMessage.value = 'ฐานข้อมูลยังไม่มีคอลัมน์งบรายหมวด กรุณารัน migration ล่าสุดก่อนใช้งาน'
+    errorMessage.value = SCHEMA_GAP_MESSAGES[gap]
     return
   }
   errorMessage.value = `${fallback}: ${describeError(error)}`
@@ -180,10 +205,14 @@ const persist = async (next: CategoryBudget[]) => {
   )
 
   if (error) {
-    // คืนค่าเดิมเพื่อไม่ให้หน้าจอโชว์สิ่งที่เซิร์ฟเวอร์ไม่ได้รับ
-    budgets.value = previous
-    if (userId) writeCache(userId, previous)
     handleError(error, 'บันทึกงบรายหมวดไม่สำเร็จ')
+
+    // ฐานข้อมูลยังไม่พร้อม: เก็บค่าไว้ในเครื่องต่อ เพราะรอ SQL ไม่ใช่ความผิดของผู้ใช้
+    // error อื่น ๆ คืนค่าเดิม ไม่ให้หน้าจอโชว์สิ่งที่เซิร์ฟเวอร์ไม่ได้รับ
+    if (!readSchemaGap(error)) {
+      budgets.value = previous
+      writeCache(userId, previous)
+    }
     return false
   }
 

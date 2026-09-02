@@ -186,7 +186,7 @@ describe('useCategoryBudgets', () => {
     expect(store.errorMessage.value).toContain('บันทึกงบรายหมวดไม่สำเร็จ')
   })
 
-  it('คอลัมน์ยังไม่มีในฐานข้อมูล = ขึ้นธง needsMigration พร้อมข้อความที่อ่านรู้เรื่อง', async () => {
+  it('คอลัมน์ยังไม่มีในฐานข้อมูล = ขึ้นธง needsMigration พร้อมบอกไฟล์ migration ที่ต้องรัน', async () => {
     state.selectResult = {
       data: null,
       error: { code: '42703', message: 'column user_settings.category_budgets_json does not exist' },
@@ -197,7 +197,45 @@ describe('useCategoryBudgets', () => {
     await store.reload()
 
     expect(store.needsMigration.value).toBe(true)
-    expect(store.errorMessage.value).toContain('migration')
+    expect(store.errorMessage.value).toContain('20260902000100_add_category_budgets.sql')
+  })
+
+  it('ยังไม่มีตาราง user_settings เลย = บอกให้รัน schema.sql ไม่ใช่ error ดิบจาก PostgREST', async () => {
+    state.selectResult = {
+      data: null,
+      error: {
+        code: 'PGRST205',
+        message: "Could not find the table 'public.user_settings' in the schema cache",
+      },
+    }
+    const { useCategoryBudgets } = await importSubject()
+
+    const store = useCategoryBudgets()
+    await store.reload()
+
+    expect(store.needsMigration.value).toBe(true)
+    expect(store.errorMessage.value).toContain('schema.sql')
+    expect(store.errorMessage.value).not.toContain('schema cache')
+  })
+
+  it('ฐานข้อมูลยังไม่พร้อม = ยังเก็บงบไว้ในเครื่องได้ ไม่ย้อนค่าที่ผู้ใช้กรอกทิ้ง', async () => {
+    const { useCategoryBudgets, CATEGORY_BUDGET_STORAGE_KEY } = await importSubject()
+    const store = useCategoryBudgets()
+    await store.reload()
+
+    state.upsertResult = {
+      data: null,
+      error: {
+        code: 'PGRST205',
+        message: "Could not find the table 'public.user_settings' in the schema cache",
+      },
+    }
+    const saved = await store.setBudget('อาหาร', 2500)
+
+    expect(saved).toBe(false)
+    expect(store.needsMigration.value).toBe(true)
+    expect(store.budgets.value).toEqual([{ category: 'อาหาร', budget: 2500 }])
+    expect(localStorage.getItem(`${CATEGORY_BUDGET_STORAGE_KEY}.user-1`)).toContain('2500')
   })
 
   it('ออฟไลน์ = เก็บลงเครื่องแล้วบอกผู้ใช้ ไม่ยิงเซิร์ฟเวอร์', async () => {

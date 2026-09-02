@@ -107,7 +107,8 @@ const submitEditor = async () => {
   const saved = await replaceBudgets(draftEntries.value)
   editorBusy.value = false
 
-  if (!saved && errorMessage.value) {
+  // ฐานข้อมูลยังไม่พร้อม = ค่าถูกเก็บในเครื่องแล้ว ปิดหน้าต่างแล้วให้แถบเตือนด้านบนอธิบายต่อ
+  if (!saved && !needsMigration.value && errorMessage.value) {
     editorError.value = errorMessage.value
     return
   }
@@ -150,7 +151,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
         <button
           type="button"
           class="budget-edit-button"
-          :disabled="readOnly || needsMigration"
+          :disabled="readOnly"
           :title="readOnly ? 'โหมดดูตัวอย่างแก้ไขไม่ได้' : 'ตั้งงบรายหมวด'"
           @click="openEditor"
         >
@@ -250,7 +251,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
       <div>
         <strong>ตั้งงบรายหมวดเพื่อเริ่มเปรียบเทียบ</strong>
         <p>กำหนดเพดานของแต่ละหมวดต่อเดือน แล้วระบบจะบอกว่าหมวดไหนใกล้เต็มหรือเกินไปแล้ว</p>
-        <button type="button" class="budget-cta" :disabled="readOnly || needsMigration" @click="openEditor">
+        <button type="button" class="budget-cta" :disabled="readOnly" @click="openEditor">
           ตั้งงบเลย
         </button>
       </div>
