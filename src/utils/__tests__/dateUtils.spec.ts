@@ -4,6 +4,9 @@ import {
   getConsecutiveDays,
   getDaysInMonth,
   getFirstDayOfWeek,
+  getIsoWeek,
+  getIsoWeekKey,
+  getIsoWeekStart,
   getLongestConsecutive,
   isIsoDate,
   parseIsoMonth,
@@ -244,5 +247,52 @@ describe('weekdayLabelsMondayFirst', () => {
     expect(weekdayLabelsMondayFirst).toHaveLength(7)
     expect(weekdayLabelsMondayFirst[0]).toBe('จ')
     expect(weekdayLabelsMondayFirst[6]).toBe('อา')
+  })
+})
+
+describe('getIsoWeekStart', () => {
+  it('คืนวันจันทร์ของสัปดาห์นั้น', () => {
+    // 26 ส.ค. 2026 เป็นวันพุธ สัปดาห์เริ่มวันจันทร์ที่ 24
+    expect(getIsoWeekStart('2026-08-26')).toBe('2026-08-24')
+  })
+
+  it('วันจันทร์คืนตัวเอง และวันอาทิตย์ยังอยู่สัปดาห์เดิม', () => {
+    expect(getIsoWeekStart('2026-08-24')).toBe('2026-08-24')
+    expect(getIsoWeekStart('2026-08-30')).toBe('2026-08-24')
+  })
+
+  it('ข้ามเดือนและข้ามปีได้', () => {
+    expect(getIsoWeekStart('2026-08-01')).toBe('2026-07-27')
+    expect(getIsoWeekStart('2027-01-01')).toBe('2026-12-28')
+  })
+})
+
+describe('getIsoWeek', () => {
+  it('1 ม.ค. 2026 เป็นวันพฤหัส จึงเป็นสัปดาห์ที่ 1 ของปี 2026', () => {
+    expect(getIsoWeek('2026-01-01')).toEqual({ year: 2026, week: 1 })
+  })
+
+  it('ต้นปีที่ยังอยู่สัปดาห์สุดท้ายของปีก่อน ใช้ปีของสัปดาห์นั้น', () => {
+    // 1 ม.ค. 2027 เป็นวันศุกร์ วันพฤหัสของสัปดาห์อยู่ในปี 2026
+    expect(getIsoWeek('2027-01-01')).toEqual({ year: 2026, week: 53 })
+    expect(getIsoWeek('2026-12-31')).toEqual({ year: 2026, week: 53 })
+  })
+
+  it('ทุกวันในสัปดาห์เดียวกันได้เลขสัปดาห์เดียวกัน', () => {
+    const week = getIsoWeek('2026-08-24')
+    for (let offset = 0; offset < 7; offset += 1) {
+      expect(getIsoWeek(shiftIsoDate('2026-08-24', offset))).toEqual(week)
+    }
+  })
+})
+
+describe('getIsoWeekKey', () => {
+  it('เติมศูนย์ให้เลขสัปดาห์หลักเดียว', () => {
+    expect(getIsoWeekKey('2026-01-01')).toBe('2026-W01')
+  })
+
+  it('เรียงลำดับตามเวลาได้ด้วยการเทียบ string', () => {
+    const keys = ['2026-08-24', '2026-06-08', '2026-12-31'].map(getIsoWeekKey)
+    expect([...keys].sort()).toEqual(['2026-W24', '2026-W35', '2026-W53'])
   })
 })

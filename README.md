@@ -8,7 +8,7 @@ Money Flow รองรับการล็อกอิน, การวิเ�
 
 - บันทึก แก้ไข ลบ และเลือกลบธุรกรรมหลายรายการ
 - สรุปยอดคงเหลือ รายรับ และรายจ่าย
-- กราฟกระแสเงินสด, สัดส่วนหมวดหมู่, Heatmap และ Bubble Galaxy
+- กราฟกระแสเงินสด, สัดส่วนหมวดหมู่, Heatmap และกราฟเส้นเทรนด์รายหมวด
 - วิเคราะห์พฤติกรรมการใช้จ่ายและคาดการณ์เงินคงเหลือ
 - ตั้งค่าเงินเดือน, เพดานรายวัน และการแจ้งเตือน
 - ระบบ achievement และ streak
@@ -376,7 +376,7 @@ src/
     SummaryCards.vue             การ์ดสรุปพร้อม Skeleton state
     SettingsModal.vue            การตั้งค่า, export และ OPIUM theme
     CategoryDonut.vue            สัดส่วนรายจ่ายตามหมวดหมู่
-    BubbleGalaxy.vue             Bubble visualization
+    SpendingTrend.vue            กราฟเส้นเทรนด์รายจ่ายแยกหมวด (SVG)
     ExpenseAnalytics.vue         วิเคราะห์รายจ่าย
     MoneyBuddy.vue               คาดการณ์สถานะเงิน
   composables/

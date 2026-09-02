@@ -5,9 +5,9 @@ import AuthGate from './components/AuthGate.vue'
 import EditTransactionModal from './components/EditTransactionModal.vue'
 import PasswordResetScreen from './components/PasswordResetScreen.vue'
 import SettingsModal from './components/SettingsModal.vue'
-import BubblePage from './pages/BubblePage.vue'
 import OverviewPage from './pages/OverviewPage.vue'
 import RecordPage from './pages/RecordPage.vue'
+import TrendPage from './pages/TrendPage.vue'
 import { useAchievements } from './composables/useAchievements'
 import { useAppMessages } from './composables/useAppMessages'
 import { useAuth } from './composables/useAuth'
@@ -411,8 +411,8 @@ onMounted(() => void auth.initialize())
           <button type="button" :class="{ active: activePage === 'overview' }" @click="navigateTo('overview')">
             <span aria-hidden="true">▥</span> ภาพรวม
           </button>
-          <button type="button" :class="{ active: activePage === 'bubbles' }" @click="navigateTo('bubbles')">
-            <span aria-hidden="true">◍</span> ฟองเงิน
+          <button type="button" :class="{ active: activePage === 'trends' }" @click="navigateTo('trends')">
+            <span aria-hidden="true">◹</span> เทรนด์
           </button>
         </div>
 
@@ -629,7 +629,7 @@ onMounted(() => void auth.initialize())
           @cancel-selection="selectionMode = false"
         />
 
-        <BubblePage v-else key="bubbles" :transactions="transactions" />
+        <TrendPage v-else key="trends" :transactions="transactions" />
       </Transition>
     </main>
 

@@ -126,3 +126,35 @@ export const shiftIsoMonth = (isoMonth: string, months: number) => {
 
 /** ชื่อวันแบบสั้นเริ่มจากวันจันทร์ ใช้เป็นหัวตารางปฏิทิน */
 export const weekdayLabelsMondayFirst = ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'] as const
+
+/**
+ * วันจันทร์ของสัปดาห์ที่วันนั้นอยู่ (ISO 8601 เริ่มสัปดาห์วันจันทร์)
+ * ใช้เป็นตัวแทนของสัปดาห์ในกราฟเทรนด์ เพราะเรียงลำดับได้ตรงกับเวลาจริง
+ */
+export const getIsoWeekStart = (isoDate: string) => {
+  const dayNumber = isoToDayNumber(isoDate)
+  // 1970-01-01 เป็นวันพฤหัส จึงบวก 3 ให้ modulo เริ่มนับที่วันจันทร์
+  const weekday = ((dayNumber + 3) % 7) + 1
+  return dayNumberToIso(dayNumber - (weekday - 1))
+}
+
+/**
+ * เลขสัปดาห์แบบ ISO 8601 พร้อมปีของสัปดาห์นั้น
+ * ปีที่คืนเป็น "ปีของสัปดาห์" ไม่ใช่ปีตามปฏิทิน เช่น 2027-01-01 (ศุกร์)
+ * ยังนับเป็นสัปดาห์ที่ 53 ของปี 2026 เพราะวันพฤหัสของสัปดาห์นั้นอยู่ในปี 2026
+ */
+export const getIsoWeek = (isoDate: string) => {
+  const dayNumber = isoToDayNumber(isoDate)
+  const weekday = ((dayNumber + 3) % 7) + 1
+  // ISO ตัดสินปีของสัปดาห์ด้วยวันพฤหัส เพราะเป็นวันกลางสัปดาห์
+  const thursday = dayNumber - weekday + 4
+  const year = new Date(thursday * MS_PER_DAY).getUTCFullYear()
+  const januaryFirst = Math.floor(Date.UTC(year, 0, 1) / MS_PER_DAY)
+  return { year, week: Math.floor((thursday - januaryFirst) / 7) + 1 }
+}
+
+/** คีย์สัปดาห์แบบเรียงลำดับได้ 'YYYY-Www' เช่น '2026-W35' */
+export const getIsoWeekKey = (isoDate: string) => {
+  const { year, week } = getIsoWeek(isoDate)
+  return `${year}-W${String(week).padStart(2, '0')}`
+}

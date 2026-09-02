@@ -1,14 +1,18 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 
-export type AppPage = 'record' | 'overview' | 'bubbles'
+export type AppPage = 'record' | 'overview' | 'trends'
 
 /** ที่เก็บหน้าที่ผู้ใช้ค้างอยู่ ใช้พากลับมาหลังต้องล็อกอินใหม่ */
 const RETURN_TO_KEY = 'moneyflow.return-to'
 
+/** hash เดิมที่เลิกใช้แล้ว ยังต้องรับไว้เพราะผู้ใช้อาจ bookmark หรือค้างอยู่ในแท็บเก่า */
+const LEGACY_HASHES: Record<string, AppPage> = { '#bubbles': 'trends' }
+
 const pageFromHash = (): AppPage => {
-  if (window.location.hash === '#overview') return 'overview'
-  if (window.location.hash === '#bubbles') return 'bubbles'
-  return 'record'
+  const hash = window.location.hash
+  if (hash === '#overview') return 'overview'
+  if (hash === '#trends') return 'trends'
+  return LEGACY_HASHES[hash] ?? 'record'
 }
 
 export interface UseNavigationOptions {
@@ -38,7 +42,15 @@ export const useNavigation = ({ onNavigate }: UseNavigationOptions = {}) => {
     if (window.location.hash !== targetHash) window.location.hash = targetHash
   }
 
-  const syncPageFromHash = () => applyPage(pageFromHash())
+  const syncPageFromHash = () => {
+    // เจอ hash เก่า ให้เขียน URL เป็นของใหม่ทันที ลิงก์ที่แชร์ต่อจะได้เป็นของใหม่
+    const legacyTarget = LEGACY_HASHES[window.location.hash]
+    if (legacyTarget) {
+      navigateTo(legacyTarget)
+      return
+    }
+    applyPage(pageFromHash())
+  }
 
   const rememberReturnLocation = () => {
     try {
@@ -75,7 +87,10 @@ export const useNavigation = ({ onNavigate }: UseNavigationOptions = {}) => {
     syncPageFromHash()
   }
 
-  onMounted(() => window.addEventListener('hashchange', syncPageFromHash))
+  onMounted(() => {
+    window.addEventListener('hashchange', syncPageFromHash)
+    if (LEGACY_HASHES[window.location.hash]) syncPageFromHash()
+  })
   onBeforeUnmount(() => window.removeEventListener('hashchange', syncPageFromHash))
 
   return {

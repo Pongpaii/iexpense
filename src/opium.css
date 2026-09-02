@@ -226,7 +226,6 @@ html[data-theme='opium'] body :is(
   .donut-card,
   .analytics-card,
   .heatmap-card,
-  .bubble-card,
   .daily-cap-card,
   .streak-pill,
   .transaction-item,
@@ -454,7 +453,7 @@ html[data-theme='opium'] body .heatmap-cell--today { outline-color: #f4e8ec; }
 html[data-theme='opium'] body :is(.grid-lines i, .axis-line) { border-color: #2d2429; }
 html[data-theme='opium'] body .bar--income { background: linear-gradient(#ded4d8, #807279); }
 html[data-theme='opium'] body .bar--expense { background: linear-gradient(#ff315f, #8c001f); }
-html[data-theme='opium'] body :is(.donut-track, .bubble-stage) {
+html[data-theme='opium'] body .donut-track {
   border-color: #31242b;
   background: #0b090b;
 }
@@ -833,7 +832,7 @@ html[data-theme='opium'] body :is(
 ) { color: #ff7697 !important; }
 
 /* Data visualizations and remaining state chains. */
-html[data-theme='opium'] body :is(.analytics-panel, .bubble-panel, .cap-card) {
+html[data-theme='opium'] body :is(.analytics-panel, .cap-card) {
   color: var(--opium-bone);
   border-color: #34262d;
   background: linear-gradient(145deg, rgba(23,18,23,.98), rgba(12,10,12,.98));
@@ -919,33 +918,6 @@ html[data-theme='opium'] body :is(.legend-row:hover, .legend-row.is-selected) {
 
 html[data-theme='opium'] body :is(.legend-bar, .legend-items) { background: #171217; }
 html[data-theme='opium'] body .legend-items { border-color: #5d2032; }
-html[data-theme='opium'] body :is(.shake-button, .bubble-legend button) {
-  color: #d8ccd1;
-  border-color: #49333d;
-  background: #1d171c;
-}
-
-html[data-theme='opium'] body :is(.shake-button, .bubble-legend button):hover {
-  color: #fff;
-  border-color: var(--opium-hot);
-  background: #430012;
-}
-
-html[data-theme='opium'] body .bubble-legend button.is-active {
-  border-color: var(--opium-hot);
-  background: #32111d;
-}
-
-html[data-theme='opium'] body .bubble-tooltip {
-  border-color: #4b303b;
-  background: rgba(16,13,16,.97);
-  box-shadow: 0 8px 24px rgba(0,0,0,.55);
-}
-
-html[data-theme='opium'] body :is(.bubble-tooltip strong, .bubble-tooltip span) {
-  color: var(--opium-bone);
-}
-
 html[data-theme='opium'] body :is(
   .buddy-card--worried .mood-badge,
   .buddy-card--crying .mood-badge,
