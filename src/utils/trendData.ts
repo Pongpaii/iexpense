@@ -191,6 +191,90 @@ export const buildCategoryTrend = (
   return { categories, periods, maxAmount, total, granularity }
 }
 
+export interface StackedPoint {
+  period: string
+  periodLabel: string
+  axisLabel: string
+  /** categoryKey → ยอดของช่วงนี้ · มีครบทุกหมวดเสมอ ช่วงที่ไม่มีรายการเป็น 0 */
+  categories: Record<string, number>
+  /** ผลรวมทุกหมวดในช่วงนี้ */
+  total: number
+}
+
+export interface StackedCategoryMeta {
+  label: string
+  emoji: string
+  color: string
+  total: number
+  /** สัดส่วนของยอดรวมทั้งช่วงที่แสดง */
+  percentage: number
+}
+
+export interface StackedAreaData {
+  points: StackedPoint[]
+  /** เรียงจากยอดรวมมากไปน้อย ใช้ซ้อนพื้นที่จากล่างขึ้นบน */
+  categoryOrder: string[]
+  categoryMeta: Record<string, StackedCategoryMeta>
+  /** ยอดรวมสูงสุดของช่วงใดช่วงหนึ่ง ใช้ตั้ง scale แกน Y */
+  maxTotal: number
+  /** ยอดรวมทุกหมวดทุกช่วง */
+  grandTotal: number
+  granularity: TrendGranularity
+}
+
+/**
+ * จัดข้อมูลสำหรับกราฟพื้นที่สะสม โดยต่อยอดจาก buildCategoryTrend
+ * เพื่อให้การจัดกลุ่มช่วงเวลาและการเรียงหมวดเป็นกฎเดียวกันกับกราฟเส้น
+ */
+export const buildStackedAreaData = (
+  transactions: Transaction[],
+  type: TransactionType,
+  granularity: TrendGranularity,
+  palette: readonly string[] = categoryPalette,
+  reference: string = toLocalIsoDate(new Date()),
+): StackedAreaData => {
+  const summary = buildCategoryTrend(transactions, type, granularity, palette, reference)
+
+  const points = summary.periods.map((period, index) => {
+    const categories: Record<string, number> = {}
+    let total = 0
+
+    for (const category of summary.categories) {
+      const amount = category.data[index].amount
+      categories[category.categoryKey] = amount
+      total += amount
+    }
+
+    return {
+      period: period.key,
+      periodLabel: period.label,
+      axisLabel: period.axisLabel,
+      categories,
+      total,
+    }
+  })
+
+  const categoryMeta: Record<string, StackedCategoryMeta> = {}
+  for (const category of summary.categories) {
+    categoryMeta[category.categoryKey] = {
+      label: category.label,
+      emoji: category.emoji,
+      color: category.color,
+      total: category.total,
+      percentage: summary.total > 0 ? (category.total / summary.total) * 100 : 0,
+    }
+  }
+
+  return {
+    points,
+    categoryOrder: summary.categories.map((category) => category.categoryKey),
+    categoryMeta,
+    maxTotal: points.reduce((largest, point) => Math.max(largest, point.total), 0),
+    grandTotal: summary.total,
+    granularity,
+  }
+}
+
 /**
  * ยุบหมวดหางยาวให้เหลือเส้นที่อ่านได้ โดยเก็บ `limit` หมวดแรกไว้
  * แล้วรวมที่เหลือเป็นเส้นเดียว · คืนชุดเดิมเมื่อยุบแล้วไม่ได้ลดจำนวนเส้นจริง

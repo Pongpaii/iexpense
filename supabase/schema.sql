@@ -299,15 +299,24 @@ create table if not exists public.user_settings (
   monthly_salary numeric(12, 2) not null default 17000
     check (monthly_salary > 0 and monthly_salary <= 100000000),
   daily_cap_json jsonb not null default '{}'::jsonb,
+  -- งบรายหมวดต่อเดือน: [{"category": "อาหาร", "budget": 5000}, ...]
+  category_budgets_json jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 alter table public.user_settings add column if not exists monthly_salary numeric(12, 2) not null default 17000;
 alter table public.user_settings add column if not exists daily_cap_json jsonb not null default '{}'::jsonb;
+alter table public.user_settings add column if not exists category_budgets_json jsonb not null default '[]'::jsonb;
 alter table public.user_settings drop constraint if exists user_settings_monthly_salary_check;
 alter table public.user_settings add constraint user_settings_monthly_salary_check
   check (monthly_salary > 0 and monthly_salary <= 100000000);
+alter table public.user_settings drop constraint if exists user_settings_category_budgets_valid;
+alter table public.user_settings add constraint user_settings_category_budgets_valid
+  check (
+    jsonb_typeof(category_budgets_json) = 'array'
+    and jsonb_array_length(category_budgets_json) <= 20
+  );
 alter table public.user_settings enable row level security;
 
 drop policy if exists "Users can read own settings" on public.user_settings;
@@ -344,6 +353,24 @@ begin
   end if;
   if new.user_id is distinct from auth.uid() then
     raise exception 'user_id must match the authenticated user' using errcode = '42501';
+  end if;
+
+  if new.category_budgets_json is null then
+    new.category_budgets_json := '[]'::jsonb;
+  end if;
+
+  -- โครงของแต่ละ element ตรวจที่นี่ เพราะ check constraint ใช้ subquery ไม่ได้
+  if exists (
+    select 1
+    from jsonb_array_elements(new.category_budgets_json) as entry
+    where jsonb_typeof(entry) <> 'object'
+      or jsonb_typeof(entry -> 'category') <> 'string'
+      or char_length(entry ->> 'category') not between 1 and 40
+      or jsonb_typeof(entry -> 'budget') <> 'number'
+      or (entry ->> 'budget')::numeric <= 0
+      or (entry ->> 'budget')::numeric > 100000000
+  ) then
+    raise exception 'category_budgets_json contains an invalid entry' using errcode = '23514';
   end if;
 
   if tg_op = 'INSERT' then

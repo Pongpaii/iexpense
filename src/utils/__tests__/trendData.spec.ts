@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { makeTransaction } from '../../test-utils/factories'
 import {
   buildCategoryTrend,
+  buildStackedAreaData,
   collapseTrendCategories,
   OTHER_TREND_KEY,
   TREND_MONTH_WINDOW,
@@ -311,5 +312,101 @@ describe('collapseTrendCategories', () => {
       )
       expect(point.period).toBe(categories[0].data[index].period)
     })
+  })
+})
+
+describe('buildStackedAreaData', () => {
+  it('ไม่มีรายการเลยก็ยังคืนช่วงเวลาครบและยอดเป็น 0', () => {
+    const data = buildStackedAreaData([], 'expense', 'week', undefined, REFERENCE)
+
+    expect(data.points).toHaveLength(TREND_WEEK_WINDOW)
+    expect(data.categoryOrder).toEqual([])
+    expect(data.categoryMeta).toEqual({})
+    expect(data.maxTotal).toBe(0)
+    expect(data.grandTotal).toBe(0)
+    expect(data.points.every((point) => point.total === 0)).toBe(true)
+  })
+
+  it('รวมยอดทุกหมวดในแต่ละช่วงเป็น total ของช่วงนั้น', () => {
+    const data = buildStackedAreaData(
+      [
+        makeTransaction({ category: 'อาหาร', amount: 300, transaction_date: '2026-08-24' }),
+        makeTransaction({ category: 'การเดินทาง', amount: 200, transaction_date: '2026-08-24' }),
+        makeTransaction({ category: 'อาหาร', amount: 100, transaction_date: '2026-08-17' }),
+      ],
+      'expense',
+      'week',
+      undefined,
+      REFERENCE,
+    )
+
+    const latest = data.points[data.points.length - 1]
+    const previous = data.points[data.points.length - 2]
+
+    expect(latest.total).toBe(500)
+    expect(previous.total).toBe(100)
+    expect(data.maxTotal).toBe(500)
+    expect(data.grandTotal).toBe(600)
+  })
+
+  it('ทุกช่วงมีคีย์ของทุกหมวดครบ เพื่อให้ซ้อนพื้นที่ได้โดยไม่ต้องเช็ค undefined', () => {
+    const data = buildStackedAreaData(
+      [
+        makeTransaction({ category: 'อาหาร', amount: 300, transaction_date: '2026-08-24' }),
+        makeTransaction({ category: 'การเดินทาง', amount: 200, transaction_date: '2026-08-17' }),
+      ],
+      'expense',
+      'week',
+      undefined,
+      REFERENCE,
+    )
+
+    for (const point of data.points) {
+      expect(Object.keys(point.categories).sort()).toEqual(['การเดินทาง', 'อาหาร'])
+    }
+    expect(data.points[data.points.length - 1].categories['การเดินทาง']).toBe(0)
+  })
+
+  it('เรียงลำดับการซ้อนจากหมวดที่ใช้มากสุดไปน้อยสุด', () => {
+    const data = buildStackedAreaData(
+      [
+        makeTransaction({ category: 'อาหาร', amount: 100, transaction_date: '2026-08-24' }),
+        makeTransaction({ category: 'ช้อปปิ้ง', amount: 900, transaction_date: '2026-08-24' }),
+        makeTransaction({ category: 'การเดินทาง', amount: 500, transaction_date: '2026-08-17' }),
+      ],
+      'expense',
+      'week',
+      undefined,
+      REFERENCE,
+    )
+
+    expect(data.categoryOrder).toEqual(['ช้อปปิ้ง', 'การเดินทาง', 'อาหาร'])
+  })
+
+  it('คำนวณสัดส่วนของแต่ละหมวดจากยอดรวมทั้งหมด', () => {
+    const data = buildStackedAreaData(
+      [
+        makeTransaction({ category: 'อาหาร', amount: 750, transaction_date: '2026-08-24' }),
+        makeTransaction({ category: 'การเดินทาง', amount: 250, transaction_date: '2026-08-17' }),
+      ],
+      'expense',
+      'week',
+      undefined,
+      REFERENCE,
+    )
+
+    expect(data.categoryMeta['อาหาร'].percentage).toBeCloseTo(75)
+    expect(data.categoryMeta['การเดินทาง'].percentage).toBeCloseTo(25)
+    expect(data.categoryMeta['อาหาร'].emoji).toBe('🍜')
+  })
+
+  it('ใช้ช่วงเดือนได้และแนบป้ายกำกับทั้งแบบเต็มและแบบสั้น', () => {
+    const data = buildStackedAreaData([], 'expense', 'month', undefined, REFERENCE)
+
+    expect(data.granularity).toBe('month')
+    expect(data.points).toHaveLength(TREND_MONTH_WINDOW)
+    expect(data.points[data.points.length - 1].period).toBe('2026-08')
+    expect(data.points[data.points.length - 1].periodLabel).toBe('ส.ค. 2569')
+    expect(data.points[data.points.length - 1].axisLabel).toBe('ส.ค.')
   })
 })

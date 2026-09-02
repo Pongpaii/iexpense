@@ -5,9 +5,9 @@ import AuthGate from './components/AuthGate.vue'
 import EditTransactionModal from './components/EditTransactionModal.vue'
 import PasswordResetScreen from './components/PasswordResetScreen.vue'
 import SettingsModal from './components/SettingsModal.vue'
+import AnalyticsPage from './pages/AnalyticsPage.vue'
 import OverviewPage from './pages/OverviewPage.vue'
 import RecordPage from './pages/RecordPage.vue'
-import TrendPage from './pages/TrendPage.vue'
 import { useAchievements } from './composables/useAchievements'
 import { useAppMessages } from './composables/useAppMessages'
 import { useAuth } from './composables/useAuth'
@@ -411,8 +411,8 @@ onMounted(() => void auth.initialize())
           <button type="button" :class="{ active: activePage === 'overview' }" @click="navigateTo('overview')">
             <span aria-hidden="true">▥</span> ภาพรวม
           </button>
-          <button type="button" :class="{ active: activePage === 'trends' }" @click="navigateTo('trends')">
-            <span aria-hidden="true">◹</span> เทรนด์
+          <button type="button" :class="{ active: activePage === 'analytics' }" @click="navigateTo('analytics')">
+            <span aria-hidden="true">◹</span> วิเคราะห์
           </button>
         </div>
 
@@ -629,7 +629,12 @@ onMounted(() => void auth.initialize())
           @cancel-selection="selectionMode = false"
         />
 
-        <TrendPage v-else key="trends" :transactions="transactions" />
+        <AnalyticsPage
+          v-else
+          key="analytics"
+          :transactions="transactions"
+          :read-only="demoMode"
+        />
       </Transition>
     </main>
 

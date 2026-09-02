@@ -1,17 +1,20 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 
-export type AppPage = 'record' | 'overview' | 'trends'
+export type AppPage = 'record' | 'overview' | 'analytics'
 
 /** ที่เก็บหน้าที่ผู้ใช้ค้างอยู่ ใช้พากลับมาหลังต้องล็อกอินใหม่ */
 const RETURN_TO_KEY = 'moneyflow.return-to'
 
 /** hash เดิมที่เลิกใช้แล้ว ยังต้องรับไว้เพราะผู้ใช้อาจ bookmark หรือค้างอยู่ในแท็บเก่า */
-const LEGACY_HASHES: Record<string, AppPage> = { '#bubbles': 'trends' }
+const LEGACY_HASHES: Record<string, AppPage> = {
+  '#bubbles': 'analytics',
+  '#trends': 'analytics',
+}
 
 const pageFromHash = (): AppPage => {
   const hash = window.location.hash
   if (hash === '#overview') return 'overview'
-  if (hash === '#trends') return 'trends'
+  if (hash === '#analytics') return 'analytics'
   return LEGACY_HASHES[hash] ?? 'record'
 }
 
