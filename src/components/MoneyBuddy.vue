@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useForecastSettings } from '../composables/useForecastSettings'
 import { useSalarySettings } from '../composables/useSalarySettings'
-import type { Transaction } from '../types/transaction'
+import { getCategoryEmoji, type Transaction, type TransactionCategory } from '../types/transaction'
 import { createFinancialForecast } from '../utils/forecast'
 import { formatBaht, formatDate } from '../utils/format'
 
@@ -20,8 +21,19 @@ const emit = defineEmits<{
 }>()
 
 const { monthlySalary, salaryDay, salaryHidden, toggleSalaryVisibility } = useSalarySettings()
+const {
+  encouragingMode,
+  excludableCategories,
+  excludedCategories,
+  hasExcludedCategories,
+  isCategoryExcluded,
+  clearExcludedCategories,
+  toggleCategoryExcluded,
+  toggleEncouragingMode,
+} = useForecastSettings()
 const reactionIndex = ref(0)
 const isTapped = ref(false)
+const isTuningOpen = ref(false)
 let tapTimer: ReturnType<typeof window.setTimeout> | undefined
 let dateRefreshTimer: ReturnType<typeof window.setInterval> | undefined
 
@@ -42,7 +54,20 @@ const forecast = computed(() => createFinancialForecast({
   monthlySalary: monthlySalary.value,
   salaryDay,
   today: currentDate.value,
+  excludedCategories: excludedCategories.value,
 }))
+
+const excludedSummary = computed(() =>
+  excludedCategories.value.map((category) => `${getCategoryEmoji(category)} ${category}`).join(' · '),
+)
+
+const toggleTuning = () => {
+  isTuningOpen.value = !isTuningOpen.value
+}
+
+const onToggleCategory = (category: TransactionCategory) => {
+  toggleCategoryExcluded(category)
+}
 
 const spendingRatio = computed(() => {
   if (props.income <= 0) return props.expense > 0 ? 100 : 0
@@ -53,7 +78,8 @@ const mood = computed<Mood>(() => {
   const result = forecast.value
 
   if (props.income === 0 && props.expense === 0 && !result.hasSpendingData) return 'ready'
-  if (props.balance < 0) return 'crying'
+  // โหมดให้กำลังใจ: ยอดติดลบไม่ควรทำให้น้องร้องไห้ใส่หน้าผู้ใช้ทุกครั้งที่เปิดแอป
+  if (props.balance < 0) return encouragingMode.value ? 'overwhelmed' : 'crying'
   // ข้อมูลยังน้อยเกินกว่าจะตัดสิน อย่าทำให้ผู้ใช้ใหม่ตกใจด้วยเลขที่ยังเชื่อไม่ได้
   if (result.status === 'insufficient') return 'ready'
   if (result.status === 'risk') return 'overwhelmed'
@@ -86,6 +112,14 @@ const forecastMessage = computed(() => {
   }
 
   if (result.status === 'risk') {
+    // โหมดให้กำลังใจ: พูดถึง "ทางไป" ก่อน ไม่เอายอดติดลบขึ้นเป็นประโยคแรก
+    if (encouragingMode.value) {
+      if (result.safeDailyBudget !== null && result.safeDailyBudget > 0) {
+        return `ช่วงนี้ตึงนิดนึง แต่มีทางไปนะ ถ้าคุมวันละราว ${formatBaht(result.safeDailyBudget)} ก็ถึงวันเงินเดือนได้`
+      }
+      return 'ช่วงนี้ตึงนิดนึง แต่แค่ยังจดอยู่ทุกวันก็เก่งมากแล้วนะ ค่อยๆ ไปด้วยกัน'
+    }
+
     if (result.currentBalance < 0) {
       return `ยอดคงเหลือติดลบ ${formatBaht(Math.abs(result.currentBalance))} แล้วนะ ยังแก้ได้อยู่เลย สู้ๆ!`
     }
@@ -96,10 +130,47 @@ const forecastMessage = computed(() => {
   }
 
   if (result.status === 'watch') {
+    if (encouragingMode.value) {
+      return `ใช้เฉลี่ยวันละ ${formatBaht(result.averageDailyExpense)} กำลังพอดีๆ อยู่นะ เว้นรายการที่รอได้อีกนิดก็สบายเลย`
+    }
     return `ช่วงนี้ใช้เฉลี่ย ${formatBaht(result.averageDailyExpense)} ต่อวัน น้องเห็นแล้วนะ ลองดูรายการที่รอได้ด้วยกันไหม`
   }
 
   return `ถ้าใช้จ่ายใกล้เคียงเดิม ก่อนเงินเดือนเข้าคาดว่าจะเหลือ ${formatBaht(result.balanceBeforeSalary)}`
+})
+
+/**
+ * ประโยคเชียร์ที่อ้างข้อมูลจริง ไม่ใช่คำปลอบลอยๆ
+ * ใช้เฉพาะโหมดให้กำลังใจ และเฉพาะอารมณ์ที่ผู้ใช้กำลังเครียด
+ */
+const cheerLines = computed(() => {
+  if (!encouragingMode.value) return []
+
+  const result = forecast.value
+  const lines: string[] = []
+
+  if (result.daysUntilSalary > 0) {
+    lines.push(
+      `อีก ${result.daysUntilSalary} วันเงินเดือนก็เข้าแล้ว ตัวเลขจะกลับมาดูใจดีขึ้นเองนะ`,
+    )
+  }
+  if (result.expenseRecordCount > 0) {
+    lines.push(
+      `จดมาแล้ว ${result.expenseRecordCount} รายการใน ${result.historyDays} วัน `
+        + 'แค่นี้ก็ชนะคนที่ไม่เคยรู้ว่าเงินหายไปไหนแล้วนะ',
+    )
+  }
+  if (result.excludedExpenseCount > 0) {
+    lines.push(
+      `กัน ${excludedSummary.value} ออกจากสูตรไว้แล้ว ตัวเลขที่เห็นคือส่วนที่ปรับได้จริงๆ`,
+    )
+  }
+  if (result.safeDailyBudget !== null && result.safeDailyBudget > 0) {
+    lines.push(`เป้าง่ายๆ วันนี้: ใช้ไม่เกิน ${formatBaht(result.safeDailyBudget)} เท่านี้ก็ผ่านแล้ว`)
+  }
+
+  lines.push('เดือนนี้ไม่ได้ตัดสินอะไรทั้งนั้น พรุ่งนี้เริ่มใหม่ได้ทุกวันเลยนะ 🌤️')
+  return lines
 })
 
 const messages = computed<Record<Mood, string[]>>(() => ({
@@ -116,12 +187,14 @@ const messages = computed<Record<Mood, string[]>>(() => ({
   ],
   worried: [
     forecastMessage.value,
+    ...cheerLines.value,
     'ไม่เป็นไรนะ ลองดูรายการย้อนหลังด้วยกันไหม อาจมีบางอย่างที่ตัดออกได้',
     'ก่อนซื้อครั้งหน้า ลองถามตัวเองว่า “ต้องการจริงๆ ไหม” ได้ผลมากเลย',
     'น้องอยู่ตรงนี้ ค่อยๆ ปรับด้วยกันได้เลย',
   ],
   overwhelmed: [
     forecastMessage.value,
+    ...cheerLines.value,
     'เดือนนี้ใช้เยอะหน่อย แต่โอเคนะ ทุกคนก็มีช่วงแบบนี้ 💪',
     'ไม่ต้องโทษตัวเองนะ แค่รู้แล้วก็ดีกว่าไม่รู้เยอะเลย',
     'ลองดูว่ามีรายการไหนที่เดือนหน้าลดได้บ้าง ทีละนิดก็ช่วยได้นะ',
@@ -129,6 +202,7 @@ const messages = computed<Record<Mood, string[]>>(() => ({
   ],
   crying: [
     forecastMessage.value,
+    ...cheerLines.value,
     'น้องเป็นห่วงนะ แต่ยังแก้ได้อยู่เลย อย่าเพิ่งกังวลมาก',
     'ค่อยๆ ดูทีละรายการ บางทีแค่งดของไม่จำเป็นก็ช่วยได้เยอะนะ',
     'น้องอยู่ตรงนี้ เดินผ่านช่วงนี้ไปด้วยกันได้เลย 🤝',
@@ -191,6 +265,11 @@ const forecastAdvice = computed(() => {
 
   if (result.status === 'watch') {
     const monthlyTrend = result.averageDailyExpense * 30
+    if (encouragingMode.value) {
+      return monthlyTrend > result.monthlySalary
+        ? `แนวโน้มเดือนนี้เกินงบอยู่ ${formatBaht(monthlyTrend - result.monthlySalary)} เฉลี่ยแล้วแค่วันละ ${formatBaht((monthlyTrend - result.monthlySalary) / 30)} เท่านั้น ลดตรงนี้ได้ก็กลับมาบวกแล้วนะ`
+        : 'รายจ่ายเริ่มใกล้งบนิดนึง ไม่มีอะไรน่าตกใจนะ แค่ลองเว้นรายการที่รอได้ก็ช่วยได้มากเลย'
+    }
     if (monthlyTrend > result.monthlySalary) {
       return `แนวโน้ม 30 วันสูงกว่าเงินเดือนประมาณ ${formatBaht(monthlyTrend - result.monthlySalary)} ลองดูรายการที่ไม่ด่วนก่อนนะ`
     }
@@ -364,9 +443,62 @@ onBeforeUnmount(() => {
               <circle cx="12" cy="12" r="2.5" />
             </svg>
           </button>
+          <button
+            class="forecast-tune"
+            type="button"
+            :aria-expanded="isTuningOpen"
+            aria-controls="forecast-tuning"
+            @click="toggleTuning"
+          >
+            ปรับสูตร
+          </button>
           <button type="button" @click="emit('editSalary')">ตั้งค่า</button>
         </div>
       </header>
+
+      <div v-if="isTuningOpen" id="forecast-tuning" class="forecast-tuning">
+        <label class="tuning-switch">
+          <input
+            type="checkbox"
+            :checked="encouragingMode"
+            @change="toggleEncouragingMode()"
+          />
+          <span>
+            <strong>โหมดให้กำลังใจ</strong>
+            พูดถึงทางออกก่อนยอดติดลบ และไม่ทำหน้าร้องไห้ใส่
+          </span>
+        </label>
+
+        <fieldset class="tuning-group">
+          <legend>ไม่เอาหมวดนี้มาคิดในสูตรคาดการณ์</legend>
+          <div class="tuning-categories">
+            <label
+              v-for="option in excludableCategories"
+              :key="option.value"
+              :class="{ 'is-on': isCategoryExcluded(option.value) }"
+            >
+              <input
+                type="checkbox"
+                :checked="isCategoryExcluded(option.value)"
+                @change="onToggleCategory(option.value)"
+              />
+              <span>{{ option.emoji }} {{ option.value }}</span>
+            </label>
+          </div>
+          <p class="tuning-note">
+            เหมาะกับค่าที่จ่ายก้อนเดียวทุกเดือนอย่างค่าที่พัก
+            ยอดคงเหลือจริงยังนับครบทุกหมวดเสมอ กันออกมีผลแค่กับตัวเลขคาดการณ์
+          </p>
+          <button
+            v-if="hasExcludedCategories"
+            class="tuning-reset"
+            type="button"
+            @click="clearExcludedCategories()"
+          >
+            รวมทุกหมวดกลับ
+          </button>
+        </fieldset>
+      </div>
 
       <div class="forecast-metrics">
         <article>
@@ -382,6 +514,9 @@ onBeforeUnmount(() => {
             {{ forecast.historyDays }} วัน · {{ forecast.expenseRecordCount }} รายการ
           </small>
           <small v-else>เริ่มจดรายจ่ายเพื่อวิเคราะห์</small>
+          <small v-if="forecast.excludedExpenseCount > 0" class="forecast-excluded">
+            ไม่รวม {{ excludedSummary }} · กันออก {{ formatBaht(forecast.excludedExpenseTotal) }}
+          </small>
         </article>
 
         <article>
@@ -402,7 +537,12 @@ onBeforeUnmount(() => {
 
         <article>
           <span>คาดว่าก่อนเงินเดือนเข้า</span>
-          <strong :class="{ 'is-negative': forecast.balanceBeforeSalary < 0 }">
+          <strong
+            :class="{
+              'is-negative': forecast.balanceBeforeSalary < 0 && !encouragingMode,
+              'is-soft': forecast.balanceBeforeSalary < 0 && encouragingMode,
+            }"
+          >
             {{ formatBaht(forecast.balanceBeforeSalary) }}
           </strong>
           <small>หักรายจ่ายคาดการณ์ {{ formatBaht(forecast.projectedExpenseUntilSalary) }}</small>
@@ -410,12 +550,23 @@ onBeforeUnmount(() => {
 
         <article>
           <span>ยอดคาดการณ์อีก 30 วัน</span>
-          <strong :class="{ 'is-negative': forecast.projectedBalance30Days < 0 }">
+          <strong
+            :class="{
+              'is-negative': forecast.projectedBalance30Days < 0 && !encouragingMode,
+              'is-soft': forecast.projectedBalance30Days < 0 && encouragingMode,
+            }"
+          >
             {{ formatBaht(forecast.projectedBalance30Days) }}
           </strong>
           <small>
             รายจ่าย {{ formatBaht(forecast.projectedExpense30Days) }} · เงินเดือน
             {{ forecast.salaryPaymentsIn30Days }} รอบ
+          </small>
+          <small
+            v-if="encouragingMode && forecast.projectedBalance30Days < 0"
+            class="forecast-reframe"
+          >
+            นี่คือภาพ “ถ้าไม่เปลี่ยนอะไรเลย” ซึ่งเปลี่ยนได้ทุกวันนะ
           </small>
         </article>
       </div>
@@ -425,6 +576,7 @@ onBeforeUnmount(() => {
         {{ forecastConfidenceLabel }} · คำนวณจากข้อมูลสูงสุด 90 วัน · เงินเดือนวันที่
         {{ forecast.salaryDay }} (ก.พ. ใช้วันสุดท้าย)
         <template v-if="forecast.isEstimateBlended"> · {{ learningNote }}</template>
+        <template v-if="hasExcludedCategories"> · ไม่รวม {{ excludedSummary }} ในสูตร</template>
       </footer>
     </section>
   </section>
@@ -820,6 +972,117 @@ onBeforeUnmount(() => {
 
 .forecast-metrics strong.is-negative {
   color: #bd4c44;
+}
+
+/* โหมดให้กำลังใจ: ยังบอกว่าติดลบด้วยตัวเลขจริง แต่ไม่ตะโกนด้วยสีแดง */
+.forecast-metrics strong.is-soft {
+  color: #7d6a94;
+}
+
+.forecast-metrics small.forecast-excluded {
+  margin-top: 5px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  color: #5c6f97;
+  background: rgba(92, 111, 151, 0.09);
+  font-weight: 700;
+}
+
+.forecast-metrics small.forecast-reframe {
+  color: #7d6a94;
+  font-weight: 700;
+}
+
+.forecast-tuning {
+  display: grid;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px dashed #c6d8cd;
+  border-radius: 11px;
+  background: rgba(247, 251, 248, 0.95);
+}
+
+.tuning-switch {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: #3f5e50;
+  font-size: 0.6rem;
+  line-height: 1.45;
+}
+
+.tuning-switch strong {
+  display: block;
+  color: #244d3a;
+  font-size: 0.63rem;
+}
+
+.tuning-group {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.tuning-group legend {
+  padding: 0 0 6px;
+  color: #74847c;
+  font-size: 0.57rem;
+  font-weight: 800;
+}
+
+.tuning-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tuning-categories label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border: 1px solid #d5e2db;
+  border-radius: 999px;
+  color: #436655;
+  background: #fff;
+  font-size: 0.57rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.16s, background 0.16s, color 0.16s;
+}
+
+.tuning-categories label.is-on {
+  border-color: #8d9fc4;
+  color: #3f4f74;
+  background: #eef2fa;
+}
+
+.tuning-categories input,
+.tuning-switch input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: #35664f;
+  flex: none;
+}
+
+.tuning-note {
+  margin: 7px 0 0;
+  color: #8b9690;
+  font-size: 0.52rem;
+  line-height: 1.45;
+}
+
+.tuning-reset {
+  margin-top: 7px;
+  padding: 4px 8px;
+  border: 1px solid #c9d9d0;
+  border-radius: 7px;
+  color: #35664f;
+  background: #fff;
+  font-family: inherit;
+  font-size: 0.55rem;
+  font-weight: 700;
 }
 
 .forecast-metrics small {

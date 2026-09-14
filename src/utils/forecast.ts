@@ -1,5 +1,5 @@
 import type { Transaction } from '../types/transaction'
-import type { TransactionCategory } from '../types/transaction'
+import { transactionCategories, type TransactionCategory } from '../types/transaction'
 
 export const FORECAST_HORIZON_DAYS = 30
 export const FORECAST_HISTORY_DAYS = 90
@@ -34,6 +34,12 @@ export interface FinancialForecast {
   observedDailyEssential: number
   /** ค่าเฉลี่ยดิบเฉพาะหมวด irregular ต่อวัน (คิดจาก monthly ÷ 30) */
   observedDailyIrregular: number
+  /** หมวดที่ผู้ใช้เลือกกันออกจากการคาดการณ์ (ยอดคงเหลือจริงยังนับครบ) */
+  excludedCategories: TransactionCategory[]
+  /** ยอดรายจ่ายในช่วงประวัติที่ถูกกันออกไป ใช้บอกผู้ใช้ว่ากันไปเท่าไร */
+  excludedExpenseTotal: number
+  /** จำนวนรายการที่ถูกกันออกไปจากการคาดการณ์ */
+  excludedExpenseCount: number
   /** ค่าอ้างอิงตอนข้อมูลน้อย คิดจากเงินเดือนหารจำนวนวันในรอบ */
   priorDailyExpense: number
   /** น้ำหนักที่ให้กับข้อมูลจริง 0-1 ยิ่งใกล้ 1 ยิ่งเชื่อข้อมูลที่บันทึกไว้ */
@@ -67,6 +73,12 @@ interface ForecastOptions {
   monthlySalary: number
   salaryDay: number
   today: string
+  /**
+   * หมวดที่ไม่ต้องเอามาคิดในสูตรคาดการณ์ เช่น ค่าที่พักที่จ่ายก้อนเดียวทุกเดือน
+   * ทำให้ตัวเลข "แนวโน้ม" อ่านแล้วใช้ตัดสินใจรายวันได้ ไม่ถูกก้อนใหญ่กลบ
+   * ยอดคงเหลือปัจจุบันยังนับรายจ่ายทุกหมวดตามจริงเสมอ
+   */
+  excludedCategories?: readonly TransactionCategory[]
 }
 
 interface DatedTransaction {
@@ -138,9 +150,21 @@ export const createFinancialForecast = ({
   monthlySalary,
   salaryDay,
   today,
+  excludedCategories = [],
 }: ForecastOptions): FinancialForecast => {
   const parsedToday = parseIsoDate(today) ?? new Date()
   parsedToday.setHours(12, 0, 0, 0)
+
+  const excludedSet = new Set<TransactionCategory>(
+    excludedCategories.filter((category) =>
+      transactionCategories.some((option) => option.value === category),
+    ),
+  )
+  const isExcluded = ({ transaction }: DatedTransaction) =>
+    transaction.category != null && excludedSet.has(transaction.category)
+  /** ยอดรายจ่ายที่ใช้ในสูตรคาดการณ์ ตัดหมวดที่ผู้ใช้กันออกไปแล้ว */
+  const sumForecastExpense = (items: DatedTransaction[]) =>
+    sumByType(items.filter((item) => !isExcluded(item)), 'expense')
 
   const normalizedSalary = Number.isFinite(monthlySalary) && monthlySalary > 0 ? monthlySalary : 0
   const normalizedSalaryDay = Math.min(31, Math.max(1, Math.round(salaryDay)))
@@ -170,11 +194,15 @@ export const createFinancialForecast = ({
     sumByType(transactionsThroughToday, 'income') -
     sumByType(transactionsThroughToday, 'expense')
 
-  const recentExpenses = datedTransactions.filter(({ dayNumber, transaction }) =>
+  const recentExpensesAllCategories = datedTransactions.filter(({ dayNumber, transaction }) =>
     transaction.type === 'expense' &&
     dayNumber >= historyStartNumber &&
     dayNumber <= todayNumber,
   )
+  // รายจ่ายที่ถูกกันออกยังอยู่ในยอดคงเหลือจริง แค่ไม่เอามาปั้นค่าเฉลี่ยรายวัน
+  const excludedRecentExpenses = recentExpensesAllCategories.filter(isExcluded)
+  const recentExpenses = recentExpensesAllCategories.filter((item) => !isExcluded(item))
+  const excludedExpenseTotal = excludedRecentExpenses.reduce((sum, { amount }) => sum + amount, 0)
   const earliestExpense = recentExpenses.reduce<DatedTransaction | null>((earliest, item) => {
     if (!earliest || item.dayNumber < earliest.dayNumber) return item
     return earliest
@@ -289,7 +317,7 @@ export const createFinancialForecast = ({
     dayNumber > todayNumber && dayNumber < nextSalaryNumber,
   )
   const knownIncomeBeforeSalary = sumByType(knownBeforeSalary, 'income')
-  const knownExpenseBeforeSalary = sumByType(knownBeforeSalary, 'expense')
+  const knownExpenseBeforeSalary = sumForecastExpense(knownBeforeSalary)
   const projectedExpenseUntilSalary =
     averageDailyExpense * daysUntilSalary + knownExpenseBeforeSalary
   const balanceBeforeSalary =
@@ -300,7 +328,7 @@ export const createFinancialForecast = ({
     dayNumber > todayNumber && dayNumber <= horizonEndNumber,
   )
   const knownIncome30Days = sumByType(knownWithinHorizon, 'income')
-  const knownExpense30Days = sumByType(knownWithinHorizon, 'expense')
+  const knownExpense30Days = sumForecastExpense(knownWithinHorizon)
   let projectedSalaryIncome30Days = 0
   let salaryPaymentsIn30Days = 0
   let salaryCursor = salaryDateForMonth(
@@ -370,6 +398,9 @@ export const createFinancialForecast = ({
     observedDailyExpense,
     observedDailyEssential,
     observedDailyIrregular,
+    excludedCategories: [...excludedSet],
+    excludedExpenseTotal,
+    excludedExpenseCount: excludedRecentExpenses.length,
     priorDailyExpense,
     estimateWeight,
     isEstimateBlended: hasSpendingData && estimateWeight < 1,

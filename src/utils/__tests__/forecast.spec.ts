@@ -23,13 +23,19 @@ const dailyExpensesEndingToday = (
 
 const forecastFor = (
   transactions = [] as ReturnType<typeof makeTransaction>[],
-  overrides: { monthlySalary?: number; salaryDay?: number; today?: string } = {},
+  overrides: {
+    monthlySalary?: number
+    salaryDay?: number
+    today?: string
+    excludedCategories?: TransactionCategory[]
+  } = {},
 ) =>
   createFinancialForecast({
     transactions,
     monthlySalary: overrides.monthlySalary ?? 30_000,
     salaryDay: overrides.salaryDay ?? 25,
     today: overrides.today ?? TODAY,
+    excludedCategories: overrides.excludedCategories,
   })
 
 describe('createFinancialForecast', () => {
@@ -327,5 +333,116 @@ describe('createFinancialForecast', () => {
     it('ถือว่าเงินเดือนติดลบเป็นศูนย์', () => {
       expect(forecastFor([], { monthlySalary: -5_000 }).monthlySalary).toBe(0)
     })
+  })
+})
+
+describe('กันหมวดออกจากสูตรคาดการณ์', () => {
+  it('ค่าเริ่มต้นไม่กันหมวดใดออก', () => {
+    const forecast = forecastFor(dailyExpensesEndingToday(30, 200))
+
+    expect(forecast.excludedCategories).toEqual([])
+    expect(forecast.excludedExpenseTotal).toBe(0)
+    expect(forecast.excludedExpenseCount).toBe(0)
+  })
+
+  it('ไม่เอาหมวดที่กันออกมาคิดค่าเฉลี่ยรายวัน', () => {
+    const transactions = [
+      ...dailyExpensesEndingToday(30, 200, 'อาหาร'),
+      makeTransaction({
+        type: 'expense',
+        amount: 6_000,
+        category: 'ที่พัก',
+        transaction_date: '2026-03-01',
+      }),
+    ]
+
+    const withRent = forecastFor(transactions, { monthlySalary: 0 })
+    const withoutRent = forecastFor(transactions, {
+      monthlySalary: 0,
+      excludedCategories: ['ที่พัก'],
+    })
+
+    expect(withRent.observedDailyExpense).toBeCloseTo(400) // 200 อาหาร + 6000/30 ที่พัก
+    expect(withoutRent.observedDailyExpense).toBeCloseTo(200)
+    expect(withoutRent.excludedCategories).toEqual(['ที่พัก'])
+    expect(withoutRent.excludedExpenseTotal).toBe(6_000)
+    expect(withoutRent.excludedExpenseCount).toBe(1)
+  })
+
+  it('ยอดคงเหลือปัจจุบันยังนับหมวดที่กันออกตามจริง', () => {
+    const transactions = [
+      makeTransaction({ type: 'income', amount: 30_000, transaction_date: '2026-03-01' }),
+      makeTransaction({
+        type: 'expense',
+        amount: 6_000,
+        category: 'ที่พัก',
+        transaction_date: '2026-03-02',
+      }),
+    ]
+
+    const forecast = forecastFor(transactions, { excludedCategories: ['ที่พัก'] })
+
+    expect(forecast.currentBalance).toBe(24_000)
+  })
+
+  it('ทำให้ยอดคาดการณ์ 30 วันดีขึ้นเมื่อกันรายจ่ายก้อนใหญ่ออก', () => {
+    const transactions = [
+      makeTransaction({ type: 'income', amount: 30_000, transaction_date: '2026-03-01' }),
+      ...dailyExpensesEndingToday(35, 300, 'อาหาร'),
+      makeTransaction({
+        type: 'expense',
+        amount: 9_000,
+        category: 'ที่พัก',
+        transaction_date: '2026-03-01',
+      }),
+    ]
+
+    const withRent = forecastFor(transactions)
+    const withoutRent = forecastFor(transactions, { excludedCategories: ['ที่พัก'] })
+
+    expect(withoutRent.projectedBalance30Days).toBeGreaterThan(withRent.projectedBalance30Days)
+  })
+
+  it('ไม่นับรายจ่ายอนาคตของหมวดที่กันออกในการคาดการณ์', () => {
+    const transactions = [
+      ...dailyExpensesEndingToday(35, 300, 'อาหาร'),
+      makeTransaction({
+        type: 'expense',
+        amount: 7_000,
+        category: 'ที่พัก',
+        transaction_date: '2026-03-20',
+      }),
+    ]
+
+    const withRent = forecastFor(transactions, { excludedCategories: [] })
+    const withoutRent = forecastFor(transactions, { excludedCategories: ['ที่พัก'] })
+
+    expect(withRent.projectedExpense30Days - withoutRent.projectedExpense30Days).toBeCloseTo(7_000)
+  })
+
+  it('มองข้ามชื่อหมวดที่ไม่มีอยู่จริง', () => {
+    const forecast = forecastFor(dailyExpensesEndingToday(30, 200), {
+      excludedCategories: ['ไม่มีหมวดนี้' as TransactionCategory],
+    })
+
+    expect(forecast.excludedCategories).toEqual([])
+    expect(forecast.observedDailyExpense).toBeCloseTo(200)
+  })
+
+  it('กลับไปสถานะรอข้อมูลเมื่อกันหมวดออกจนไม่เหลือรายจ่าย', () => {
+    const transactions = [
+      makeTransaction({
+        type: 'expense',
+        amount: 5_000,
+        category: 'ที่พัก',
+        transaction_date: '2026-03-10',
+      }),
+    ]
+
+    const forecast = forecastFor(transactions, { excludedCategories: ['ที่พัก'] })
+
+    expect(forecast.hasSpendingData).toBe(false)
+    expect(forecast.averageDailyExpense).toBe(0)
+    expect(forecast.excludedExpenseCount).toBe(1)
   })
 })
