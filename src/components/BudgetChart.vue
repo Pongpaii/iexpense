@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useCategoryBudgets, type CategoryBudget } from '../composables/useCategoryBudgets'
 import { useTheme } from '../composables/useTheme'
 import { transactionCategories, type Transaction, type TransactionCategory } from '../types/transaction'
-import { buildBudgetComparison } from '../utils/budgetComparison'
+import { buildBudgetComparison, buildBudgetPacing } from '../utils/budgetComparison'
 import { categoryPalette, formatPercent, opiumCategoryPalette } from '../utils/categoryBreakdown'
 import { toLocalIsoDate } from '../utils/dateUtils'
 import { formatBaht } from '../utils/format'
@@ -47,6 +47,24 @@ const comparison = computed(() =>
 
 /** ความกว้างของแถบ: เกินงบให้เต็มแถบ แล้วบอกส่วนเกินด้วยข้อความ ไม่ล้นออกนอกกรอบ */
 const barWidth = (percentage: number) => `${Math.min(Math.max(percentage, 0), 100)}%`
+
+const today = toLocalIsoDate(new Date())
+
+/** งบที่เหลือชนกับเงินที่มีจริง เพื่อตอบว่า "ตอนนี้ใช้ได้อีกเท่าไร" */
+const pacing = computed(() =>
+  buildBudgetPacing(comparison.value, {
+    transactions: props.transactions,
+    month: monthValid.value ? selectedMonth.value : todayMonth,
+    today,
+  }),
+)
+
+const paceLabel = computed(() => {
+  if (!pacing.value.isCurrentMonth) return 'สรุปแล้วของเดือนนั้น'
+  if (pacing.value.pace === 'behind') return 'ใช้เร็วกว่าเวลา'
+  if (pacing.value.pace === 'ahead') return 'ใช้ช้ากว่าเวลา'
+  return 'พอดีกับเวลา'
+})
 
 const statusLabel = (status: string) =>
   status === 'over' ? 'เกินงบ' : status === 'near' ? 'ใกล้เต็ม' : 'ยังพอ'
@@ -166,6 +184,48 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
     </p>
 
     <div v-if="hasBudgets" class="budget-body">
+      <section class="budget-spendable" aria-label="งบที่ใช้ได้จริงตอนนี้">
+        <div class="budget-spendable__main">
+          <small>ตอนนี้ใช้ได้อีก</small>
+          <strong :class="{ 'is-over': pacing.spendableNow < 0 }">
+            {{ formatBaht(Math.max(pacing.spendableNow, 0)) }}
+          </strong>
+          <em v-if="pacing.isCurrentMonth">
+            เหลืออีก {{ pacing.daysLeft }} วัน · วันละ {{ formatBaht(pacing.dailyAllowance) }}
+          </em>
+          <em v-else>เดือนนั้นจบแล้ว ตัวเลขนี้คือผลสรุป</em>
+        </div>
+
+        <ul class="budget-spendable__facts">
+          <li>
+            <small>งบที่เหลือตามแผน</small>
+            <b :class="{ 'is-over': pacing.budgetRemaining < 0 }">
+              {{ formatBaht(pacing.budgetRemaining) }}
+            </b>
+          </li>
+          <li>
+            <small>เงินคงเหลือสะสมจริง</small>
+            <b :class="{ 'is-over': pacing.availableBalance < 0 }">
+              {{ formatBaht(pacing.availableBalance) }}
+            </b>
+          </li>
+          <li>
+            <small>จังหวะการใช้</small>
+            <b :class="`pace pace--${pacing.pace}`">{{ paceLabel }}</b>
+          </li>
+        </ul>
+
+        <p class="budget-spendable__note">
+          <template v-if="pacing.limitedByBalance">
+            เงินจริงเหลือน้อยกว่างบที่ตั้งไว้ ตัวเลข “ใช้ได้อีก” จึงยึดเงินจริงเป็นเพดาน
+          </template>
+          <template v-else>
+            ใช้งบไปแล้ว {{ formatPercent(pacing.budgetUsedPercent) }} ขณะที่เดือนเดินไป
+            {{ formatPercent(pacing.monthProgressPercent) }}
+          </template>
+        </p>
+      </section>
+
       <ul class="budget-summary">
         <li>
           <small>งบรวมของ{{ monthLabel }}</small>
@@ -345,6 +405,21 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
 .budget-alert--soft { border-color: rgba(224,170,76,.42); color: #a5722a; background: rgba(224,170,76,.1); }
 
 .budget-body { display: grid; gap: 13px; }
+
+.budget-spendable { display: grid; gap: 9px; padding: 12px 13px; border: 1px solid rgba(50,131,91,.3); border-radius: 14px; background: rgba(50,131,91,.05); }
+.budget-spendable__main { display: grid; gap: 2px; }
+.budget-spendable__main small { color: var(--muted); font: 800 .53rem 'Noto Sans Thai', sans-serif; letter-spacing: .04em; }
+.budget-spendable__main strong { color: #1f5c40; font: 700 1.25rem 'Manrope', 'Noto Sans Thai', sans-serif; line-height: 1.15; }
+.budget-spendable__main strong.is-over { color: #b8483f; }
+.budget-spendable__main em { color: #4a6a5b; font: 700 .58rem 'Noto Sans Thai', sans-serif; font-style: normal; }
+.budget-spendable__facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 7px; margin: 0; padding: 0; list-style: none; }
+.budget-spendable__facts li { display: grid; gap: 1px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface, #fff); }
+.budget-spendable__facts small { color: var(--muted); font: 700 .48rem 'Noto Sans Thai', sans-serif; }
+.budget-spendable__facts b { color: var(--ink); font: 700 .66rem 'Manrope', 'Noto Sans Thai', sans-serif; }
+.budget-spendable__facts b.is-over { color: #b8483f; }
+.budget-spendable__facts b.pace--behind { color: #a8622a; }
+.budget-spendable__facts b.pace--ahead { color: #2c7a55; }
+.budget-spendable__note { margin: 0; color: #4a6a5b; font: 600 .53rem 'Noto Sans Thai', sans-serif; line-height: 1.45; }
 
 .budget-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
 .budget-summary li { display: grid; gap: 2px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 12px; }

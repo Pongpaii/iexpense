@@ -59,6 +59,106 @@ const statusOf = (percentage: number): BudgetStatus => {
   return percentage >= BUDGET_NEAR_THRESHOLD ? 'near' : 'under'
 }
 
+/** ยอมรับความคลาดเคลื่อนของจังหวะการใช้เงินได้กี่จุดเปอร์เซ็นต์ ก่อนจะบอกว่าเร็ว/ช้ากว่าเวลา */
+const PACE_TOLERANCE_POINTS = 5
+
+/** ใช้เร็วกว่าเวลา / พอดี / ช้ากว่าเวลา */
+export type BudgetPace = 'ahead' | 'ontrack' | 'behind'
+
+export interface BudgetPacing {
+  /** เงินจริงที่มีอยู่ ณ วันนี้ = รายรับสะสม - รายจ่ายสะสมทั้งหมด */
+  availableBalance: number
+  /** งบที่เหลือตามแผน (ติดลบได้เมื่อใช้เกินไปแล้ว) */
+  budgetRemaining: number
+  /**
+   * ใช้ได้จริงเท่าไร = ค่าที่น้อยกว่าระหว่างงบที่เหลือกับเงินที่มีจริง
+   * งบเหลือ 5,000 แต่เงินในมือ 800 ก็ใช้ได้จริงแค่ 800
+   */
+  spendableNow: number
+  /** true เมื่อเงินจริงเป็นตัวจำกัด ไม่ใช่งบ */
+  limitedByBalance: boolean
+  daysInMonth: number
+  /** จำนวนวันที่ยังใช้เงินได้ นับวันนี้ด้วย · 0 เมื่อดูเดือนที่ผ่านไปแล้ว */
+  daysLeft: number
+  /** เกลี่ยเงินที่ใช้ได้จริงจนสิ้นเดือนแล้วได้วันละเท่าไร */
+  dailyAllowance: number
+  /** เดือนนี้เดินไปแล้วกี่เปอร์เซ็นต์ ใช้เทียบกับงบที่ใช้ไป */
+  monthProgressPercent: number
+  /** ใช้งบไปแล้วกี่เปอร์เซ็นต์ */
+  budgetUsedPercent: number
+  pace: BudgetPace
+  isCurrentMonth: boolean
+}
+
+const daysInCalendarMonth = (month: string) => {
+  const [year, monthNumber] = month.split('-').map(Number)
+  return new Date(year, monthNumber, 0).getDate()
+}
+
+const pacingOf = (budgetUsedPercent: number, monthProgressPercent: number): BudgetPace => {
+  if (budgetUsedPercent > monthProgressPercent + PACE_TOLERANCE_POINTS) return 'behind'
+  if (budgetUsedPercent < monthProgressPercent - PACE_TOLERANCE_POINTS) return 'ahead'
+  return 'ontrack'
+}
+
+/**
+ * ยอดคงเหลือสะสมถึงวันที่กำหนด นับทุกหมวดตามจริง
+ * ไม่ตัดตามเดือนที่เลือก เพราะเงินที่มีอยู่จริงคือผลของทุกเดือนที่ผ่านมา
+ */
+export const sumAvailableBalance = (transactions: Transaction[], today: string) =>
+  transactions.reduce((balance, transaction) => {
+    if (transaction.transaction_date > today) return balance
+
+    const amount = Number(transaction.amount)
+    if (!Number.isFinite(amount)) return balance
+
+    return transaction.type === 'income' ? balance + amount : balance - amount
+  }, 0)
+
+/**
+ * ตอบคำถามว่า "ตอนนี้งบเหลือให้ใช้จริงเท่าไร"
+ *
+ * งบที่ตั้งไว้เป็นแค่แผน เงินที่มีอยู่จริงคือเพดานจริง จึงต้องเอาสองอย่างมาชนกัน
+ * แล้วบอกค่าที่น้อยกว่า พร้อมเกลี่ยเป็นรายวันให้ตัดสินใจได้ทันทีในวันนี้
+ */
+export const buildBudgetPacing = (
+  summary: BudgetComparisonSummary,
+  options: { transactions: Transaction[]; month: string; today: string },
+): BudgetPacing => {
+  const { transactions, month, today } = options
+  const availableBalance = sumAvailableBalance(transactions, today)
+  const budgetRemaining = summary.totalBudget - summary.totalActual
+  const spendableNow = Math.min(budgetRemaining, availableBalance)
+  const daysInMonth = daysInCalendarMonth(month)
+  const isCurrentMonth = today.slice(0, 7) === month
+
+  // เดือนที่ผ่านไปแล้วไม่มีวันเหลือให้วางแผน · เดือนอนาคตถือว่ายังไม่เริ่มใช้
+  const dayOfMonth = isCurrentMonth
+    ? Number(today.slice(8, 10))
+    : today.slice(0, 7) > month
+      ? daysInMonth
+      : 0
+  const daysLeft = isCurrentMonth ? Math.max(daysInMonth - dayOfMonth + 1, 1) : 0
+  const monthProgressPercent = (dayOfMonth / daysInMonth) * 100
+  const budgetUsedPercent = summary.totalBudget > 0
+    ? (summary.totalActual / summary.totalBudget) * 100
+    : 0
+
+  return {
+    availableBalance,
+    budgetRemaining,
+    spendableNow,
+    limitedByBalance: availableBalance < budgetRemaining,
+    daysInMonth,
+    daysLeft,
+    dailyAllowance: daysLeft > 0 ? Math.max(spendableNow, 0) / daysLeft : 0,
+    monthProgressPercent,
+    budgetUsedPercent,
+    pace: pacingOf(budgetUsedPercent, monthProgressPercent),
+    isCurrentMonth,
+  }
+}
+
 /**
  * เทียบงบรายหมวดกับรายจ่ายจริงของเดือนที่เลือก
  *
