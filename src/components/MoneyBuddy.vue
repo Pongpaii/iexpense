@@ -20,7 +20,7 @@ const emit = defineEmits<{
   editSalary: []
 }>()
 
-const { monthlySalary, salaryDay, salaryHidden, toggleSalaryVisibility } = useSalarySettings()
+const { monthlySalary, salaryDay, salaryHidden } = useSalarySettings()
 const {
   encouragingMode,
   excludableCategories,
@@ -243,6 +243,36 @@ const nextSalaryTiming = computed(() => {
   return `อีก ${forecast.value.daysUntilSalary} วัน`
 })
 
+/**
+ * "เงินอยู่ได้อีกกี่วัน" = ยอดคงเหลือรวม ÷ รายจ่ายเฉลี่ยต่อวัน
+ * ตัวเลขมาจาก forecast.estimatedMoneyLastsDays จึงใช้ค่าเฉลี่ยชุดเดียวกับการ์ดอื่น
+ */
+const runwayDays = computed(() => forecast.value.estimatedMoneyLastsDays)
+
+const runwayLabel = computed(() => {
+  if (forecast.value.currentBalance <= 0) return 'เงินหมดแล้ว'
+  if (runwayDays.value === null) return 'รอข้อมูล'
+  if (runwayDays.value > 365) return 'เกิน 365 วัน'
+  return `${runwayDays.value} วัน`
+})
+
+const runwayLevel = computed(() => {
+  if (forecast.value.currentBalance <= 0) return 'risk'
+  if (runwayDays.value === null) return 'unknown'
+  if (runwayDays.value <= 7) return 'risk'
+  if (runwayDays.value < forecast.value.daysUntilSalary) return 'watch'
+  return 'safe'
+})
+
+/** เทียบ runway กับวันเงินเดือน เพื่อบอกว่าพอถึงรอบหน้าหรือขาดอีกกี่วัน */
+const runwayVsSalary = computed(() => {
+  if (runwayDays.value === null || forecast.value.currentBalance <= 0) return null
+
+  const gap = runwayDays.value - forecast.value.daysUntilSalary
+  if (gap >= 0) return `พอถึงวันเงินเดือน เผื่อได้อีก ${gap} วัน`
+  return `ขาดอีกประมาณ ${Math.abs(gap)} วันก่อนเงินเดือนเข้า`
+})
+
 const forecastAdvice = computed(() => {
   const result = forecast.value
 
@@ -428,22 +458,6 @@ onBeforeUnmount(() => {
         <div class="forecast-heading__actions">
           <span class="forecast-status">{{ forecastStatusLabel }}</span>
           <button
-            class="forecast-privacy"
-            type="button"
-            :aria-label="salaryHidden ? 'แสดงเงินเดือน' : 'เบลอเงินเดือน'"
-            :aria-pressed="!salaryHidden"
-            :title="salaryHidden ? 'แสดงเงินเดือน' : 'เบลอเงินเดือน'"
-            @click="toggleSalaryVisibility"
-          >
-            <svg v-if="salaryHidden" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M3 3l18 18M10.6 10.7a2 2 0 0 0 2.7 2.7M9.9 4.3A10.7 10.7 0 0 1 12 4c5.5 0 9 5.1 9 5.1a14.8 14.8 0 0 1-2.5 2.8M6.6 6.7C4.4 8.2 3 10.9 3 10.9S6.5 16 12 16c1 0 2-.2 2.8-.5" />
-            </svg>
-            <svg v-else viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M3 12s3.5-5 9-5 9 5 9 5-3.5 5-9 5-9-5-9-5Z" />
-              <circle cx="12" cy="12" r="2.5" />
-            </svg>
-          </button>
-          <button
             class="forecast-tune"
             type="button"
             :aria-expanded="isTuningOpen"
@@ -520,19 +534,28 @@ onBeforeUnmount(() => {
         </article>
 
         <article>
-          <span>เงินเดือนรอบหน้า</span>
+          <span>เงินอยู่ได้อีกกี่วัน</span>
           <strong
-            class="salary-amount"
-            :aria-label="salaryHidden ? 'ซ่อนจำนวนเงินเดือนอยู่' : formatBaht(forecast.monthlySalary)"
+            :class="{
+              'is-negative': runwayLevel === 'risk' && !encouragingMode,
+              'is-soft': runwayLevel === 'risk' && encouragingMode,
+            }"
           >
-            <span :class="{ 'is-blurred': salaryHidden }" aria-hidden="true">
-              {{ formatBaht(forecast.monthlySalary) }}
-            </span>
+            {{ runwayLabel }}
           </strong>
-          <small>
-            <time :datetime="forecast.nextSalaryDate">{{ formatDate(forecast.nextSalaryDate) }}</time>
-            · {{ nextSalaryTiming }}
+          <small v-if="runwayDays !== null">
+            {{ formatBaht(forecast.currentBalance) }} ÷ วันละ
+            {{ formatBaht(forecast.averageDailyExpense) }}
           </small>
+          <small v-else>เริ่มจดรายจ่ายแล้วน้องจะคำนวณให้</small>
+          <small v-if="forecast.moneyRunsOutDate">
+            หมดประมาณ
+            <time :datetime="forecast.moneyRunsOutDate">
+              {{ formatDate(forecast.moneyRunsOutDate) }}
+            </time>
+            · เงินเดือนเข้า{{ nextSalaryTiming }}
+          </small>
+          <small v-if="runwayVsSalary" class="forecast-runway-gap">{{ runwayVsSalary }}</small>
         </article>
 
         <article>
@@ -904,33 +927,10 @@ onBeforeUnmount(() => {
   outline-offset: 1px;
 }
 
-.forecast-heading__actions .forecast-privacy {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  padding: 0;
-}
-
-.forecast-privacy svg {
-  width: 15px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.forecast-metrics .salary-amount > span {
-  min-height: 0;
-  color: inherit;
-  font: inherit;
-  transition: filter 0.18s ease;
-}
-
-.forecast-metrics .salary-amount > .is-blurred {
-  filter: blur(5px);
-  user-select: none;
+.forecast-metrics small.forecast-runway-gap {
+  margin-top: 4px;
+  color: #4a6b58;
+  font-weight: 700;
 }
 
 .forecast-metrics {

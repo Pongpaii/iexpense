@@ -53,7 +53,10 @@ export interface FinancialForecast {
   confidence: ForecastConfidence
   currentBalance: number
   daysUntilSalary: number
+  /** จำนวนวันที่ยอดคงเหลือรวมจะอยู่ได้ ถ้ายังใช้เฉลี่ยวันละเท่าเดิม */
   estimatedMoneyLastsDays: number | null
+  /** วันที่คาดว่าเงินจะหมด (null เมื่อยังคำนวณค่าเฉลี่ยไม่ได้) */
+  moneyRunsOutDate: string | null
   expenseRecordCount: number
   hasSpendingData: boolean
   historyDays: number
@@ -374,6 +377,10 @@ export const createFinancialForecast = ({
   const estimatedMoneyLastsDays = averageDailyExpense > 0
     ? Math.max(0, Math.floor(Math.max(currentBalance, 0) / averageDailyExpense))
     : null
+  // วันที่เงินหมด = วันนี้ + จำนวนวันที่อยู่ได้ (ยอดติดลบอยู่แล้ว = หมดวันนี้)
+  const moneyRunsOutDate = estimatedMoneyLastsDays === null
+    ? null
+    : toIsoDate(addDays(parsedToday, estimatedMoneyLastsDays))
 
   // เตือนได้เมื่อข้อมูลพอจะสรุปเท่านั้น ยกเว้นกรณีเงินติดลบอยู่จริงซึ่งเป็น
   // ข้อเท็จจริงวันนี้ ไม่ใช่การพยากรณ์ จึงต้องเตือนไม่ว่าข้อมูลจะน้อยแค่ไหน
@@ -411,6 +418,7 @@ export const createFinancialForecast = ({
     currentBalance,
     daysUntilSalary,
     estimatedMoneyLastsDays,
+    moneyRunsOutDate,
     expenseRecordCount,
     hasSpendingData,
     historyDays,

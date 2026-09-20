@@ -445,4 +445,58 @@ describe('กันหมวดออกจากสูตรคาดการ�
     expect(forecast.averageDailyExpense).toBe(0)
     expect(forecast.excludedExpenseCount).toBe(1)
   })
+
+  describe('เงินอยู่ได้อีกกี่วัน', () => {
+    it('คิดจากยอดคงเหลือรวมหารรายจ่ายเฉลี่ยต่อวัน', () => {
+      const transactions = [
+        makeTransaction({ type: 'income', amount: 30_000, transaction_date: '2026-01-05' }),
+        ...dailyExpensesEndingToday(30, 200),
+      ]
+
+      const forecast = forecastFor(transactions)
+
+      expect(forecast.averageDailyExpense).toBeCloseTo(200)
+      expect(forecast.estimatedMoneyLastsDays).toBe(
+        Math.floor(forecast.currentBalance / forecast.averageDailyExpense),
+      )
+    })
+
+    it('บอกวันที่เงินจะหมดตามจำนวนวันที่อยู่ได้', () => {
+      const transactions = [
+        makeTransaction({ type: 'income', amount: 30_000, transaction_date: '2026-01-05' }),
+        ...dailyExpensesEndingToday(30, 200),
+      ]
+
+      const forecast = forecastFor(transactions)
+      const runsOut = new Date(`${TODAY}T12:00:00`)
+      runsOut.setDate(runsOut.getDate() + (forecast.estimatedMoneyLastsDays ?? 0))
+      const expected = `${runsOut.getFullYear()}-${String(runsOut.getMonth() + 1).padStart(2, '0')}-${String(
+        runsOut.getDate(),
+      ).padStart(2, '0')}`
+
+      expect(forecast.moneyRunsOutDate).toBe(expected)
+    })
+
+    it('เป็น 0 วันและหมดวันนี้เมื่อยอดคงเหลือติดลบ', () => {
+      const transactions = [
+        makeTransaction({ type: 'income', amount: 1_000, transaction_date: '2026-01-05' }),
+        ...dailyExpensesEndingToday(30, 200),
+      ]
+
+      const forecast = forecastFor(transactions)
+
+      expect(forecast.currentBalance).toBeLessThan(0)
+      expect(forecast.estimatedMoneyLastsDays).toBe(0)
+      expect(forecast.moneyRunsOutDate).toBe(TODAY)
+    })
+
+    it('เป็น null เมื่อยังไม่มีรายจ่ายให้คำนวณค่าเฉลี่ย', () => {
+      const forecast = forecastFor([
+        makeTransaction({ type: 'income', amount: 30_000, transaction_date: '2026-03-01' }),
+      ])
+
+      expect(forecast.estimatedMoneyLastsDays).toBeNull()
+      expect(forecast.moneyRunsOutDate).toBeNull()
+    })
+  })
 })
