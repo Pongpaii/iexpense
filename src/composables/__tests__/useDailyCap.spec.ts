@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { makeTransaction } from '../../test-utils/factories'
 import {
   buildPlanProgress,
+  capExcludableCategories,
   dayKindForDate,
   defaultDailyCapSettings,
   formatKeywords,
@@ -11,6 +12,7 @@ import {
   matchPlanItem,
   parseKeywords,
   recordedMinutesOfDay,
+  splitCountedExpenses,
   sumPlanItems,
   type CapPlanItem,
 } from '../useDailyCap'
@@ -356,5 +358,70 @@ describe('defaultDailyCapSettings', () => {
         defaultDailyCapSettings[kind].items.some((item) => item.category === null),
       ).toBe(true)
     }
+  })
+})
+
+describe('splitCountedExpenses', () => {
+  const transactions = [
+    makeTransaction({ amount: 120, category: 'อาหาร' }),
+    makeTransaction({ amount: 60, category: 'การเดินทาง' }),
+    makeTransaction({ amount: 4500, category: 'ที่พัก' }),
+    makeTransaction({ amount: 300, category: 'บิลและบริการ' }),
+    makeTransaction({ amount: 17_000, type: 'income', category: 'เงินเดือน' }),
+  ]
+
+  it('ไม่ระบุหมวดที่กันออก = นับรายจ่ายทุกรายการ', () => {
+    const result = splitCountedExpenses(transactions)
+
+    expect(result.counted).toHaveLength(4)
+    expect(result.excludedTotal).toBe(0)
+    expect(result.excludedCount).toBe(0)
+  })
+
+  it('กันหมวดที่เลือกออกจากงบ และบอกยอดที่กันไป', () => {
+    const result = splitCountedExpenses(transactions, ['ที่พัก', 'บิลและบริการ'])
+
+    expect(result.counted.map((item) => item.category)).toEqual(['อาหาร', 'การเดินทาง'])
+    expect(result.excludedTotal).toBe(4800)
+    expect(result.excludedCount).toBe(2)
+  })
+
+  it('รายการที่ไม่ระบุหมวดยังนับในงบเสมอ', () => {
+    const result = splitCountedExpenses(
+      [makeTransaction({ amount: 90, category: null })],
+      ['ที่พัก'],
+    )
+
+    expect(result.counted).toHaveLength(1)
+  })
+
+  it('งบที่กันหมวดไว้ ต้องไม่ดึงรายจ่ายหมวดนั้นเข้าช่องรวม', () => {
+    const items = [
+      planItem({ id: 'food', category: 'อาหาร', amount: 200 }),
+      planItem({ id: 'other', category: null, amount: 100 }),
+    ]
+    const { counted } = splitCountedExpenses(
+      [
+        makeTransaction({ amount: 150, category: 'อาหาร' }),
+        makeTransaction({ amount: 4500, category: 'ที่พัก' }),
+      ],
+      ['ที่พัก'],
+    )
+
+    const progress = buildPlanProgress(items, counted)
+    expect(progress.items.find((row) => row.item.id === 'other')?.spent).toBe(0)
+    expect(progress.unplanned).toBe(0)
+  })
+})
+
+describe('excludedCategories ในค่าเริ่มต้น', () => {
+  it('เริ่มต้นนับทุกหมวด', () => {
+    expect(defaultDailyCapSettings.excludedCategories).toEqual([])
+  })
+
+  it('เงินเดือนไม่อยู่ในรายการที่กันออกได้ เพราะเป็นรายรับ', () => {
+    const values = capExcludableCategories.map((option) => option.value as string)
+    expect(values).not.toContain('เงินเดือน')
+    expect(values).toContain('ที่พัก')
   })
 })

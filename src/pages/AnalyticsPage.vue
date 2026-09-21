@@ -3,7 +3,7 @@ import { defineAsyncComponent, h, ref } from 'vue'
 import SkeletonPanel from '../components/SkeletonPanel.vue'
 import type { Transaction } from '../types/transaction'
 
-type AnalyticsTab = 'trend' | 'flow' | 'budget'
+type AnalyticsTab = 'runway' | 'budget'
 
 const lazyPanel = (
   loader: () => Promise<unknown>,
@@ -15,14 +15,9 @@ const lazyPanel = (
     delay: 120,
   })
 
-const SpendingTrend = lazyPanel(() => import('../components/SpendingTrend.vue'), {
-  height: 300,
-  label: 'กำลังโหลดกราฟเทรนด์',
-})
-
-const StackedAreaChart = lazyPanel(() => import('../components/StackedAreaChart.vue'), {
-  height: 300,
-  label: 'กำลังโหลดกราฟกระแสค่าใช้จ่าย',
+const RunwayPanel = lazyPanel(() => import('../components/RunwayPanel.vue'), {
+  height: 320,
+  label: 'กำลังโหลดสรุป runway',
 })
 
 const BudgetChart = lazyPanel(() => import('../components/BudgetChart.vue'), {
@@ -31,12 +26,11 @@ const BudgetChart = lazyPanel(() => import('../components/BudgetChart.vue'), {
 })
 
 const tabs = [
-  { id: 'trend', icon: '📈', label: 'เทรนด์' },
-  { id: 'flow', icon: '📊', label: 'กระแส' },
+  { id: 'runway', icon: '⏳', label: 'อยู่ได้อีกกี่วัน' },
   { id: 'budget', icon: '🏦', label: 'งบ' },
 ] as const
 
-const activeTab = ref<AnalyticsTab>('trend')
+const activeTab = ref<AnalyticsTab>('runway')
 
 withDefaults(defineProps<{ transactions: Transaction[]; readOnly?: boolean }>(), {
   readOnly: false,
@@ -63,21 +57,12 @@ withDefaults(defineProps<{ transactions: Transaction[]; readOnly?: boolean }>(),
     </div>
 
     <div
-      v-if="activeTab === 'trend'"
-      id="analytics-panel-trend"
+      v-if="activeTab === 'runway'"
+      id="analytics-panel-runway"
       role="tabpanel"
-      aria-labelledby="analytics-tab-trend"
+      aria-labelledby="analytics-tab-runway"
     >
-      <SpendingTrend :transactions="transactions" />
-    </div>
-
-    <div
-      v-else-if="activeTab === 'flow'"
-      id="analytics-panel-flow"
-      role="tabpanel"
-      aria-labelledby="analytics-tab-flow"
-    >
-      <StackedAreaChart :transactions="transactions" />
+      <RunwayPanel :transactions="transactions" />
     </div>
 
     <div
@@ -94,7 +79,7 @@ withDefaults(defineProps<{ transactions: Transaction[]; readOnly?: boolean }>(),
 <style scoped>
 .app-page { display: block; }
 
-.analytics-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; max-width: 380px; margin: 0 auto 12px; padding: 3px; border-radius: 9px; background: #e9efeb; }
+.analytics-tabs { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0; max-width: 380px; margin: 0 auto 12px; padding: 3px; border-radius: 9px; background: #e9efeb; }
 .analytics-tabs button { display: inline-flex; min-height: 34px; align-items: center; justify-content: center; gap: 5px; padding: 4px 9px; border: 0; border-radius: 7px; color: #728078; background: transparent; font: 700 .62rem 'Noto Sans Thai', sans-serif; cursor: pointer; transition: color .16s, background .16s; }
 .analytics-tabs button.active { color: #20563e; background: #fff; box-shadow: 0 2px 7px rgba(25,77,59,.1); }
 .analytics-tabs button:focus-visible { outline: 3px solid rgba(73,137,103,.22); outline-offset: 1px; }

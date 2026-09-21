@@ -958,3 +958,130 @@ html[data-theme='opium'] body .buddy .shadow { fill: rgba(0,0,0,.34); }
 html[data-theme='opium'] body .buddy .tear { fill: #ff7697; stroke: #a50028; }
 html[data-theme='opium'] body .spark { color: #ff426d; }
 html[data-theme='opium'] body .puddle { background: rgba(196,0,47,.28); }
+
+/* --- ตัวกรองหมวดในงบรายวัน --- */
+html[data-theme='opium'] body .cap-filter {
+  border-color: #3a2c32;
+  background: #151115;
+}
+
+html[data-theme='opium'] body :is(.cap-filter__lead, .cap-excluded) { color: #b1a5aa; }
+html[data-theme='opium'] body .cap-filter__lead b { color: var(--opium-bone); }
+
+html[data-theme='opium'] body .cap-filter__chip {
+  color: #c9bec3;
+  border-color: #3a2c32;
+  background: #1d171c;
+}
+
+html[data-theme='opium'] body .cap-filter__chip.is-off {
+  color: #ff7697;
+  border-color: #5d2032;
+  background: #241318;
+}
+
+html[data-theme='opium'] body .cap-filter__chip input { accent-color: var(--opium-hot); }
+
+html[data-theme='opium'] body .cap-filter__reset {
+  color: #ff7697;
+  background: #2a1620;
+}
+
+/* --- หน้า runway --- */
+html[data-theme='opium'] body :is(.runway-tune, .runway-chip) {
+  color: #ff7697;
+  border-color: #4b303b;
+  background: #1d171c;
+}
+
+html[data-theme='opium'] body .runway-tune:hover {
+  color: #fff;
+  border-color: var(--opium-hot);
+  background: #430012;
+}
+
+html[data-theme='opium'] body .runway-chip { color: #c9bec3; }
+
+html[data-theme='opium'] body .runway-chip.is-off {
+  color: #ff7697;
+  border-color: #5d2032;
+  background: #241318;
+}
+
+html[data-theme='opium'] body .runway-chip input { accent-color: var(--opium-hot); }
+
+html[data-theme='opium'] body .runway-tuning {
+  border-color: #3a2c32;
+  background: #151115;
+}
+
+html[data-theme='opium'] body .runway-tuning p { color: #b1a5aa; }
+html[data-theme='opium'] body .runway-tuning p b { color: var(--opium-bone); }
+
+html[data-theme='opium'] body .runway-tuning > button {
+  color: #ff7697;
+  background: #2a1620;
+}
+
+html[data-theme='opium'] body .runway-hero {
+  border-color: #4b303b;
+  background: linear-gradient(145deg, #1b1119, #120d12);
+}
+
+html[data-theme='opium'] body .runway-hero--insufficient {
+  border-color: #3a2c32;
+  background: #151115;
+}
+
+html[data-theme='opium'] body :is(
+  .runway-hero__main strong,
+  .runway-hero__main p,
+  .runway-facts b,
+  .runway-race__head b,
+  .runway-target b,
+  .runway-scenarios__head b,
+  .runway-scenarios__head span,
+  .runway-levers header strong,
+  .runway-lever__head b
+) { color: var(--opium-bone); }
+
+html[data-theme='opium'] body :is(
+  .runway-hero--risk .runway-hero__main strong,
+  .runway-hero--watch .runway-hero__main strong,
+  .runway-facts b.is-over,
+  .runway-target b.is-over
+) { color: #ff7697; }
+
+html[data-theme='opium'] body :is(
+  .runway-hero__main span,
+  .runway-target,
+  .runway-scenarios small,
+  .runway-levers header span,
+  .runway-lever__name
+) { color: #b1a5aa; }
+
+html[data-theme='opium'] body .runway-track { background: #282126; }
+
+html[data-theme='opium'] body .runway-track__fill {
+  background: linear-gradient(90deg, #8d001d, #ff174f);
+}
+
+html[data-theme='opium'] body .runway-hero--risk ~ .runway-race .runway-track__fill {
+  background: repeating-linear-gradient(-45deg, #8d001d 0 8px, #ff174f 8px 16px);
+}
+
+html[data-theme='opium'] body :is(.runway-facts li, .runway-scenarios li) {
+  border-color: #3a2c32;
+  background: #151115;
+}
+
+html[data-theme='opium'] body .runway-scenarios li.is-ok { border-color: #4b303b; background: #1b1119; }
+html[data-theme='opium'] body .runway-scenarios li.is-risk { border-color: #5d2032; background: #241318; }
+html[data-theme='opium'] body .runway-scenarios li.is-primary { box-shadow: 0 0 0 2px rgba(255,23,79,.28); }
+
+html[data-theme='opium'] body .runway-lever__name mark {
+  color: #fff;
+  background: var(--opium-blood);
+}
+
+html[data-theme='opium'] body :is(.runway-levers, .runway-foot) { border-color: #3a2c32; }

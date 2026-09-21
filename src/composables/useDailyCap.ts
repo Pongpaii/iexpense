@@ -37,6 +37,14 @@ export interface DailyCapSettings {
   enabled: boolean
   weekday: DailyCapProfile
   weekend: DailyCapProfile
+  /**
+   * หมวดที่ไม่ต้องเอามานับในงบรายวัน
+   *
+   * ทำไม: ค่าที่พัก ค่าบิล หรือค่าเรียนเป็นก้อนใหญ่ที่จ่ายเป็นรอบ ไม่ใช่เงินใช้ประจำวัน
+   * ถ้าปล่อยให้เข้าหลอด งบวันนั้นจะแดงทั้งวันทั้งที่การใช้จ่ายรายวันยังปกติ
+   * ยอดคงเหลือและสรุปยอดยังนับทุกหมวดตามจริง ตรงนี้กันแค่มุมมองงบรายวัน
+   */
+  excludedCategories: TransactionCategory[]
 }
 
 export const MAX_DAILY_CAP = 1_000_000
@@ -44,8 +52,8 @@ export const MAX_PLAN_ITEMS = 10
 
 export const DAILY_CAP_STORAGE_KEY = 'money-flow.daily-cap.v1'
 
-/** v1 จับคู่ด้วยเวลาก่อนหมวดหมู่ · v2 ใช้หมวดหมู่คัดกลุ่มก่อน */
-const CURRENT_VERSION = 2
+/** v1 จับคู่ด้วยเวลาก่อนหมวดหมู่ · v2 ใช้หมวดหมู่คัดกลุ่มก่อน · v3 กันหมวดออกจากงบได้ */
+const CURRENT_VERSION = 3
 
 export const dayKindLabels: Record<DayKind, string> = {
   weekday: 'วันทำงาน (จ.-ศ.)',
@@ -67,6 +75,7 @@ const dinnerWindow: CapTimeWindow = { start: '15:00', end: '04:59' }
 
 const createDefaultSettings = (): DailyCapSettings => ({
   enabled: true,
+  excludedCategories: [],
   weekday: {
     cap: 320,
     items: [
@@ -214,6 +223,22 @@ const normalizeProfile = (value: unknown, fallback: DailyCapProfile): DailyCapPr
   }
 }
 
+/** หมวดที่กันออกจากงบรายวันได้ · ไม่รวมเงินเดือนเพราะเป็นรายรับ ไม่เคยเข้าหลอดงบ */
+export const capExcludableCategories = transactionCategories.filter(
+  (option) => option.value !== 'เงินเดือน',
+)
+
+const normalizeExcludedCategories = (value: unknown): TransactionCategory[] => {
+  if (!Array.isArray(value)) return []
+
+  return value
+    .filter((item): item is TransactionCategory =>
+      typeof item === 'string' &&
+      capExcludableCategories.some((option) => option.value === item),
+    )
+    .filter((category, index, list) => list.indexOf(category) === index)
+}
+
 const normalizeSettings = (value: unknown): DailyCapSettings => {
   const fallback = createDefaultSettings()
   if (typeof value !== 'object' || value === null) return fallback
@@ -221,6 +246,7 @@ const normalizeSettings = (value: unknown): DailyCapSettings => {
 
   return {
     enabled: typeof raw.enabled === 'boolean' ? raw.enabled : fallback.enabled,
+    excludedCategories: normalizeExcludedCategories(raw.excludedCategories),
     weekday: normalizeProfile(raw.weekday, fallback.weekday),
     weekend: normalizeProfile(raw.weekend, fallback.weekend),
   }
@@ -499,6 +525,44 @@ export const buildPlanProgress = (
   }
 }
 
+export interface CountedExpenses {
+  /** รายจ่ายที่ต้องนับในงบรายวัน */
+  counted: Transaction[]
+  /** ยอดรวมของหมวดที่ถูกกันออก ใช้บอกผู้ใช้ว่ากันไปเท่าไร */
+  excludedTotal: number
+  excludedCount: number
+}
+
+/**
+ * แยกรายจ่ายของวันออกเป็น "นับในงบ" กับ "กันออก"
+ *
+ * ยอดที่กันออกไม่ได้หายไปจากแอป แค่ไม่เข้าหลอดงบรายวัน ยอดคงเหลือและการ์ดสรุป
+ * ยังคิดจากรายการทุกหมวดตามจริงเสมอ
+ */
+export const splitCountedExpenses = (
+  transactions: readonly Transaction[],
+  excludedCategories: readonly TransactionCategory[] = [],
+): CountedExpenses => {
+  const excluded = new Set<TransactionCategory>(excludedCategories)
+  const counted: Transaction[] = []
+  let excludedTotal = 0
+  let excludedCount = 0
+
+  for (const transaction of transactions) {
+    if (transaction.type !== 'expense') continue
+
+    if (transaction.category != null && excluded.has(transaction.category)) {
+      excludedTotal += Number(transaction.amount) || 0
+      excludedCount += 1
+      continue
+    }
+
+    counted.push(transaction)
+  }
+
+  return { counted, excludedTotal: Math.round(excludedTotal * 100) / 100, excludedCount }
+}
+
 const setCapEnabled = (enabled: boolean): CapSaveResult => {
   settings.value = { ...settings.value, enabled }
   return { ok: true, persisted: persist() }
@@ -539,6 +603,35 @@ const resetProfile = (kind: DayKind): CapSaveResult => {
   return { ok: true, persisted: persist() }
 }
 
+const setCapCategoryExcluded = (
+  category: TransactionCategory,
+  excluded: boolean,
+): CapSaveResult => {
+  if (!capExcludableCategories.some((option) => option.value === category)) {
+    return { ok: false, persisted: false }
+  }
+
+  const current = settings.value.excludedCategories
+  if (excluded === current.includes(category)) return { ok: true, persisted: true }
+
+  settings.value = {
+    ...settings.value,
+    excludedCategories: excluded
+      ? [...current, category]
+      : current.filter((item) => item !== category),
+  }
+  return { ok: true, persisted: persist() }
+}
+
+const toggleCapCategoryExcluded = (category: TransactionCategory) =>
+  setCapCategoryExcluded(category, !settings.value.excludedCategories.includes(category))
+
+const clearCapExcludedCategories = (): CapSaveResult => {
+  if (settings.value.excludedCategories.length === 0) return { ok: true, persisted: true }
+  settings.value = { ...settings.value, excludedCategories: [] }
+  return { ok: true, persisted: persist() }
+}
+
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (event) => {
     if (event.key !== DAILY_CAP_STORAGE_KEY) return
@@ -556,6 +649,8 @@ if (typeof window !== 'undefined') {
 }
 
 const capEnabled = computed(() => settings.value.enabled)
+const capExcludedCategories = computed(() => settings.value.excludedCategories)
+const hasCapExcludedCategories = computed(() => settings.value.excludedCategories.length > 0)
 
 const clonePlanItem = (item: CapPlanItem): CapPlanItem => ({
   ...item,
@@ -583,6 +678,7 @@ export const applyServerDailyCap = (value: unknown) => {
 
 export const cloneDailyCapSettings = (value: DailyCapSettings): DailyCapSettings => ({
   enabled: value.enabled,
+  excludedCategories: [...(value.excludedCategories ?? [])],
   weekday: {
     cap: value.weekday.cap,
     items: value.weekday.items.map(clonePlanItem),
@@ -605,6 +701,15 @@ export const registerServerCapSaver = (
 export const useDailyCap = () => ({
   capSettings: readonlySettings,
   capEnabled,
+  capExcludedCategories,
+  hasCapExcludedCategories,
+  capExcludableCategories,
+  isCapCategoryExcluded: (category: TransactionCategory) =>
+    settings.value.excludedCategories.includes(category),
+  setCapCategoryExcluded,
+  toggleCapCategoryExcluded,
+  clearCapExcludedCategories,
+  splitCountedExpenses,
   profileForKind: (kind: DayKind) => settings.value[kind],
   profileForDate: (isoDate: string) => settings.value[dayKindForDate(isoDate)],
   capForDate: (isoDate: string) => settings.value[dayKindForDate(isoDate)].cap,

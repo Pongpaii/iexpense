@@ -86,17 +86,25 @@ describe('buildBudgetComparison', () => {
     expect(summary.totalRemaining).toBe(900)
   })
 
-  it('เรียงจากใช้เกินสัดส่วนมากสุดไปน้อยสุด', () => {
+  it('อาหารกับการเดินทางขึ้นก่อน แล้วที่เหลือเรียงจากใช้เกินสัดส่วนมากสุด', () => {
     const summary = buildBudgetComparison(
       [
         makeTransaction({ category: 'อาหาร', amount: 1000, transaction_date: '2026-08-04' }),
         makeTransaction({ category: 'การเดินทาง', amount: 900, transaction_date: '2026-08-04' }),
+        makeTransaction({ category: 'ช้อปปิ้ง', amount: 1900, transaction_date: '2026-08-04' }),
+        makeTransaction({ category: 'ที่พัก', amount: 100, transaction_date: '2026-08-04' }),
       ],
-      budgets,
+      [...budgets, { category: 'ช้อปปิ้ง', budget: 2000 }, { category: 'ที่พัก', budget: 4000 }],
       MONTH,
     )
 
-    expect(summary.items.map((item) => item.category)).toEqual(['การเดินทาง', 'อาหาร'])
+    // การเดินทางใช้ไป 90% เทียบกับอาหาร 20% แต่ยังต้องอยู่หลังอาหารตามลำดับของแอป
+    expect(summary.items.map((item) => item.category)).toEqual([
+      'อาหาร',
+      'การเดินทาง',
+      'ช้อปปิ้ง',
+      'ที่พัก',
+    ])
   })
 
   it('ตัดรายการของเดือนอื่นและรายรับออก', () => {
@@ -137,6 +145,24 @@ describe('buildBudgetComparison', () => {
     expect(summary.noBudgetCategories[1].emoji).toBe('🏷️')
     expect(summary.monthTotal).toBe(1100)
     expect(summary.totalActual).toBe(100)
+  })
+
+  it('หมวดที่ยังไม่ตั้งงบก็ยกอาหาร/การเดินทางขึ้นก่อนแม้ยอดน้อยกว่า', () => {
+    const summary = buildBudgetComparison(
+      [
+        makeTransaction({ category: 'ช้อปปิ้ง', amount: 5000, transaction_date: '2026-08-04' }),
+        makeTransaction({ category: 'การเดินทาง', amount: 80, transaction_date: '2026-08-04' }),
+        makeTransaction({ category: 'อาหาร', amount: 50, transaction_date: '2026-08-04' }),
+      ],
+      [],
+      MONTH,
+    )
+
+    expect(summary.noBudgetCategories.map((entry) => entry.label)).toEqual([
+      'อาหาร',
+      'การเดินทาง',
+      'ช้อปปิ้ง',
+    ])
   })
 
   it('ไล่สีตาม palette ตามลำดับที่แสดง', () => {

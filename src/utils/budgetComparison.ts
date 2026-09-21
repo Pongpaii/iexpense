@@ -1,5 +1,6 @@
 import type { CategoryBudget } from '../composables/useCategoryBudgets'
 import {
+  compareCategoryPriority,
   getCategoryEmoji,
   type Transaction,
   type TransactionCategory,
@@ -37,7 +38,7 @@ export interface NoBudgetCategory {
 }
 
 export interface BudgetComparisonSummary {
-  /** เรียงจากใช้เกินงบมากสุดไปน้อยสุด */
+  /** อาหาร → การเดินทาง → ที่เหลือเรียงจากใช้เกินงบมากสุดไปน้อยสุด */
   items: BudgetVsActual[]
   totalBudget: number
   /** จ่ายจริงเฉพาะหมวดที่ตั้งงบไว้ */
@@ -48,7 +49,7 @@ export interface BudgetComparisonSummary {
   totalRemaining: number
   /** ใช้เกินไปเท่าไรรวมทุกหมวด */
   totalOverspend: number
-  /** หมวดที่มีรายจ่ายแต่ไม่ได้ตั้งงบ เรียงจากมากไปน้อย */
+  /** หมวดที่มีรายจ่ายแต่ไม่ได้ตั้งงบ · อาหาร/การเดินทางก่อน แล้วเรียงจากมากไปน้อย */
   noBudgetCategories: NoBudgetCategory[]
   /** จ่ายจริงทั้งเดือน รวมหมวดที่ไม่ได้ตั้งงบ */
   monthTotal: number
@@ -210,6 +211,10 @@ export const buildBudgetComparison = (
       }
     })
     .sort((a, b) => {
+      // ค่าอาหารกับค่าเดินทางต้องอยู่หัวตารางงบเสมอ เพราะเป็นสองหมวดที่ลดได้จริงในวันนี้
+      const byPriority = compareCategoryPriority(a.category, b.category)
+      if (byPriority !== 0) return byPriority
+
       const byPercentage = b.percentage - a.percentage
       return byPercentage !== 0 ? byPercentage : b.budget - a.budget
     })
@@ -224,7 +229,9 @@ export const buildBudgetComparison = (
       actual: group.amount,
       transactionCount: group.count,
     }))
-    .sort((a, b) => b.actual - a.actual)
+    .sort(
+      (a, b) => compareCategoryPriority(a.category, b.category) || b.actual - a.actual,
+    )
 
   return {
     items,

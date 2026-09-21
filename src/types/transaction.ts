@@ -15,6 +15,37 @@ export const transactionCategories = [
 
 export type TransactionCategory = (typeof transactionCategories)[number]['value']
 
+/**
+ * หมวดที่ต้องขึ้นก่อนเสมอในทุกมุมมองที่เกี่ยวกับงบ
+ *
+ * ทำไม: อาหารกับการเดินทางเกิดทุกวันและเป็นสองหมวดที่ผู้ใช้ "ลดวันนี้ได้จริง"
+ * ส่วนก้อนใหญ่อย่างค่าที่พักหรือบิลจ่ายเดือนละครั้ง เห็นก่อนก็ทำอะไรไม่ได้ในวันนี้
+ * จึงต้องให้สองหมวดนี้อยู่หัวลิสต์ ไม่ปล่อยให้ตัวเลขก้อนใหญ่ดันมันตกไปท้ายตาราง
+ */
+export const priorityCategories = ['อาหาร', 'การเดินทาง'] as const
+
+export type PriorityCategory = (typeof priorityCategories)[number]
+
+export const isPriorityCategory = (
+  category: TransactionCategory | null | undefined,
+): category is PriorityCategory =>
+  category != null && (priorityCategories as readonly string[]).includes(category)
+
+/** ยิ่งเลขน้อยยิ่งขึ้นก่อน · หมวดนอกลิสต์ได้เลขท้ายสุดเท่ากันหมด */
+export const categoryPriorityRank = (category: TransactionCategory | null | undefined) => {
+  const index = (priorityCategories as readonly string[]).indexOf(category ?? '')
+  return index === -1 ? priorityCategories.length : index
+}
+
+/**
+ * comparator: อาหาร → การเดินทาง → ที่เหลือ
+ * หมวดที่เหลือถือว่าเสมอกัน (คืน 0) ให้ตัวเรียกตัดสินลำดับต่อด้วยเกณฑ์ของตัวเอง
+ */
+export const compareCategoryPriority = (
+  a: TransactionCategory | null | undefined,
+  b: TransactionCategory | null | undefined,
+) => categoryPriorityRank(a) - categoryPriorityRank(b)
+
 export const getCategoryEmoji = (category: TransactionCategory | null | undefined) =>
   transactionCategories.find((option) => option.value === category)?.emoji ?? '🏷️'
 

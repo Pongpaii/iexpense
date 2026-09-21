@@ -9,8 +9,10 @@ Money Flow รองรับการล็อกอิน, การวิเ�
 - บันทึก แก้ไข ลบ และเลือกลบธุรกรรมหลายรายการ
 - สรุปยอดคงเหลือ รายรับ และรายจ่าย
 - กราฟกระแสเงินสด, สัดส่วนหมวดหมู่ และ Heatmap
-- หน้าวิเคราะห์ 3 มุมมอง: เทรนด์รายหมวด, กระแสสะสม และงบ vs จ่ายจริง
+- หน้าวิเคราะห์ 2 มุมมอง: Runway (เงินที่เหลืออยู่ได้อีกกี่วัน) และงบ vs จ่ายจริง
 - วิเคราะห์พฤติกรรมการใช้จ่ายและคาดการณ์เงินคงเหลือ
+- งบรายวันเลือกได้ว่าจะไม่นับหมวดไหน (เช่น ค่าที่พักที่จ่ายเป็นรอบ)
+- ค่าอาหารและค่าเดินทางถูกยกขึ้นเป็นอันดับต้นในทุกมุมมองที่เกี่ยวกับงบ
 - ตั้งค่าเงินเดือน, เพดานรายวัน และการแจ้งเตือน
 - ระบบ achievement และ streak
 - ธีมปกติและธีม OPIUM ที่จำค่าบนอุปกรณ์
@@ -29,7 +31,7 @@ Money Flow รองรับการล็อกอิน, การวิเ�
 - Lazy-loaded analytics components และ Skeleton loading
 - ดึง transaction จาก Supabase เป็นช่วงและแสดงรายการครั้งละ 50 แถว
 - Security headers และ cache policy สำหรับ Vercel
-- CI ตรวจ TypeScript, ESLint, 319 tests และ production build
+- CI ตรวจ TypeScript, ESLint, 429 tests และ production build
 
 ## เทคโนโลยี
 
@@ -213,8 +215,8 @@ npm run build
 สถานะชุดทดสอบล่าสุด:
 
 ```text
-12 test files passed
-319 tests passed
+19 test files passed
+429 tests passed
 0 tests failed
 ```
 
@@ -381,8 +383,8 @@ src/
     SummaryCards.vue             การ์ดสรุปพร้อม Skeleton state
     SettingsModal.vue            การตั้งค่า, export และ OPIUM theme
     CategoryDonut.vue            สัดส่วนรายจ่ายตามหมวดหมู่
-    SpendingTrend.vue            กราฟเส้นเทรนด์รายจ่ายแยกหมวด (SVG)
-    StackedAreaChart.vue         กราฟพื้นที่สะสมแยกหมวด (SVG)
+    RunwayPanel.vue              เงินที่เหลืออยู่ได้อีกกี่วัน + คันโยกรายหมวด
+    DailyCapBar.vue              งบรายวัน เลือกหมวดที่ไม่นับได้
     BudgetChart.vue              งบรายหมวด vs จ่ายจริง พร้อมหน้าต่างตั้งงบ
     ExpenseAnalytics.vue         วิเคราะห์รายจ่าย
     MoneyBuddy.vue               คาดการณ์สถานะเงิน
@@ -391,6 +393,8 @@ src/
     useTransactions.ts           fetch/mutate และ offline integration
     useOfflineQueue.ts           queue และ sync รายการ offline
     useNavigation.ts             route/hash state
+    useDailyCap.ts               เพดานรายวัน, แผนย่อย และหมวดที่ไม่นับในงบ
+    useForecastSettings.ts       หมวดที่กันออกจากการคาดการณ์/runway
     useUndoDelete.ts             undo transaction deletion
     useInstallPrompt.ts          PWA installation
     useTheme.ts                  persisted default/OPIUM theme
@@ -400,7 +404,7 @@ src/
     api.ts                       timeout, retry และ user-facing errors
     monitoring.ts                optional Sentry integration
     supabase.ts                  Supabase client
-  utils/                         analytics, formatting, forecast และ demo data
+  utils/                         analytics, formatting, forecast, runway และ demo data
 supabase/
   schema.sql                     baseline schema, triggers และ RLS
   migrations/                    schema changes หลัง baseline

@@ -22,6 +22,7 @@ vi.mock('../../lib/api', () => ({
 
 const capSettings = {
   enabled: true,
+  excludedCategories: [],
   weekday: { cap: 300, items: [] },
   weekend: { cap: 250, items: [] },
 }

@@ -6,10 +6,16 @@ import {
   dayKindEmojis,
   dayKindLabels,
   formatTimeWindow,
+  splitCountedExpenses,
   sumPlanItems,
   useDailyCap,
 } from '../composables/useDailyCap'
-import type { Transaction } from '../types/transaction'
+import {
+  compareCategoryPriority,
+  getCategoryEmoji,
+  type Transaction,
+  type TransactionCategory,
+} from '../types/transaction'
 import { formatBaht } from '../utils/format'
 
 const props = withDefaults(
@@ -25,7 +31,17 @@ const props = withDefaults(
 
 const emit = defineEmits<{ edit: [] }>()
 
-const { capEnabled, profileForKind, dayKindForDate } = useDailyCap()
+const {
+  capEnabled,
+  profileForKind,
+  dayKindForDate,
+  capExcludableCategories,
+  capExcludedCategories,
+  hasCapExcludedCategories,
+  isCapCategoryExcluded,
+  toggleCapCategoryExcluded,
+  clearCapExcludedCategories,
+} = useDailyCap()
 
 const dayKind = computed(() => dayKindForDate(props.date))
 const profile = computed(() => profileForKind(dayKind.value))
@@ -33,12 +49,47 @@ const cap = computed(() => profile.value.cap)
 const planTotal = computed(() => sumPlanItems(profile.value.items))
 const planSpare = computed(() => Math.round((cap.value - planTotal.value) * 100) / 100)
 
-const expenses = computed(() => props.transactions.filter(({ type }) => type === 'expense'))
+/** รายจ่ายที่นับในงบ = ตัดรายรับและหมวดที่ผู้ใช้เลือกไม่ให้แสดงออกไปแล้ว */
+const countedExpenses = computed(() =>
+  splitCountedExpenses(props.transactions, capExcludedCategories.value),
+)
+const expenses = computed(() => countedExpenses.value.counted)
 const spent = computed(
   () => Math.round(expenses.value.reduce((sum, item) => sum + (Number(item.amount) || 0), 0) * 100) / 100,
 )
 
+const excludedTotal = computed(() => countedExpenses.value.excludedTotal)
+const excludedCount = computed(() => countedExpenses.value.excludedCount)
+const excludedSummary = computed(() =>
+  capExcludedCategories.value
+    .map((category) => `${getCategoryEmoji(category)} ${category}`)
+    .join(' · '),
+)
+
+const filterOpen = ref(false)
+const toggleFilter = () => {
+  filterOpen.value = !filterOpen.value
+}
+const onToggleCategory = (category: TransactionCategory) => {
+  toggleCapCategoryExcluded(category)
+}
+
 const progress = computed(() => buildPlanProgress(profile.value.items, expenses.value))
+
+/**
+ * ค่าอาหารกับค่าเดินทางต้องอยู่หัวลิสต์เสมอ เพราะเป็นสองช่องที่ลดได้จริงในวันนี้
+ * ช่องที่เหลือคงลำดับตามที่ผู้ใช้ตั้งไว้ (stable sort ด้วย index เดิม)
+ */
+const planRows = computed(() =>
+  progress.value.items
+    .map((row, index) => ({ row, index }))
+    .sort(
+      (left, right) =>
+        compareCategoryPriority(left.row.item.category, right.row.item.category) ||
+        left.index - right.index,
+    )
+    .map(({ row }) => row),
+)
 
 /** เดินนาฬิกาไว้เพื่อขยับเครื่องหมาย "ตอนนี้" ให้ตรงช่วงเวลาปัจจุบัน */
 const now = ref(new Date())
@@ -127,10 +178,54 @@ const spareLevel = computed(() => {
         </p>
       </div>
 
-      <button class="cap-edit" type="button" title="ตั้งค่างบรายวัน" @click="emit('edit')">
-        ตั้งค่า
-      </button>
+      <div class="cap-head__actions">
+        <button
+          class="cap-edit cap-edit--ghost"
+          type="button"
+          :aria-expanded="filterOpen"
+          aria-controls="cap-filter-panel"
+          title="เลือกหมวดที่ไม่ต้องนับในงบวันนี้"
+          @click="toggleFilter"
+        >
+          {{ hasCapExcludedCategories ? `ไม่นับ ${capExcludedCategories.length} หมวด` : 'เลือกหมวด' }}
+        </button>
+        <button class="cap-edit" type="button" title="ตั้งค่างบรายวัน" @click="emit('edit')">
+          ตั้งค่า
+        </button>
+      </div>
     </header>
+
+    <div v-if="filterOpen" id="cap-filter-panel" class="cap-filter">
+      <p class="cap-filter__lead">
+        ติ๊กหมวดที่ไม่อยากให้นับในงบวันนี้ เช่น ค่าที่พักหรือค่าบิลที่จ่ายเป็นรอบ
+        <b>ยอดคงเหลือและการ์ดสรุปยังนับครบทุกหมวดตามจริง</b>
+      </p>
+
+      <div class="cap-filter__grid">
+        <label
+          v-for="option in capExcludableCategories"
+          :key="option.value"
+          class="cap-filter__chip"
+          :class="{ 'is-off': isCapCategoryExcluded(option.value) }"
+        >
+          <input
+            type="checkbox"
+            :checked="isCapCategoryExcluded(option.value)"
+            @change="onToggleCategory(option.value)"
+          />
+          <span>{{ option.emoji }} {{ option.value }}</span>
+        </label>
+      </div>
+
+      <button
+        v-if="hasCapExcludedCategories"
+        class="cap-filter__reset"
+        type="button"
+        @click="clearCapExcludedCategories()"
+      >
+        นับทุกหมวดเหมือนเดิม
+      </button>
+    </div>
 
     <div
       class="cap-track cap-track--main"
@@ -149,9 +244,16 @@ const spareLevel = computed(() => {
     </p>
     <small class="cap-hint">{{ hint }}</small>
 
-    <ul v-if="progress.items.length" class="cap-plan" aria-label="ความคืบหน้าของแต่ละช่องในแผน">
+    <small v-if="hasCapExcludedCategories" class="cap-excluded">
+      ไม่นับ: {{ excludedSummary }}
+      <template v-if="excludedCount > 0">
+        · กันออก {{ formatBaht(excludedTotal) }} จาก {{ excludedCount }} รายการของวันนี้
+      </template>
+    </small>
+
+    <ul v-if="planRows.length" class="cap-plan" aria-label="ความคืบหน้าของแต่ละช่องในแผน">
       <li
-        v-for="row in progress.items"
+        v-for="row in planRows"
         :key="row.item.id"
         class="cap-slot"
         :class="[`cap-slot--${row.level}`, { 'cap-slot--active': row.item.id === activeSlotId }]"
@@ -310,6 +412,13 @@ const spareLevel = computed(() => {
   font-weight: 700;
 }
 
+.cap-head__actions {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .cap-edit {
   flex: 0 0 auto;
   padding: 7px 11px;
@@ -320,6 +429,71 @@ const spareLevel = computed(() => {
   font-family: 'Noto Sans Thai', sans-serif;
   font-size: 0.63rem;
   font-weight: 700;
+}
+
+.cap-edit--ghost {
+  border-style: dashed;
+  color: #5b7568;
+}
+
+.cap-filter {
+  display: grid;
+  gap: 8px;
+  padding: 10px 11px;
+  border: 1px dashed #d6e0d9;
+  border-radius: 12px;
+  background: #f7faf8;
+}
+
+.cap-filter__lead {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.6rem;
+  line-height: 1.55;
+}
+
+.cap-filter__lead b { color: #45534c; font-weight: 700; }
+
+.cap-filter__grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.cap-filter__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border: 1px solid #dbe4de;
+  border-radius: 999px;
+  background: #fff;
+  color: #45534c;
+  font-size: 0.6rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cap-filter__chip input { width: 12px; height: 12px; accent-color: #2f6b51; }
+.cap-filter__chip.is-off { border-color: #e3c7c2; color: #9b6a63; background: #fdf6f5; text-decoration: line-through; }
+.cap-filter__chip:focus-within { outline: 3px solid rgba(41, 116, 79, 0.22); outline-offset: 1px; }
+
+.cap-filter__reset {
+  justify-self: start;
+  padding: 5px 9px;
+  border: 0;
+  border-radius: 8px;
+  color: #2f6b51;
+  background: var(--green-light);
+  font-family: 'Noto Sans Thai', sans-serif;
+  font-size: 0.6rem;
+  font-weight: 700;
+}
+
+.cap-excluded {
+  color: #9b6a63;
+  font-size: 0.58rem;
+  line-height: 1.5;
 }
 
 .cap-edit:hover {

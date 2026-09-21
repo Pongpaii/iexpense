@@ -1,5 +1,10 @@
 import type { Transaction } from '../types/transaction'
-import { transactionCategories, type TransactionCategory } from '../types/transaction'
+import {
+  compareCategoryPriority,
+  priorityCategories,
+  transactionCategories,
+  type TransactionCategory,
+} from '../types/transaction'
 
 export const FORECAST_HORIZON_DAYS = 30
 export const FORECAST_HISTORY_DAYS = 90
@@ -12,17 +17,19 @@ const SALARY_LATE_WINDOW_DAYS = 1
  * หมวดหมู่ที่เกิดขึ้นเป็นประจำทุกวัน (daily essentials)
  * ใช้คำนวณค่าเฉลี่ยต่อวันโดยตรง ส่วนหมวดอื่นจะคิดเป็นค่าเฉลี่ยต่อเดือนแทน
  * เพื่อไม่ให้รายจ่ายก้อนใหญ่ที่ไม่ได้เกิดทุกวัน (เช่น ช้อปปิ้ง) ดึงค่าเฉลี่ยให้สูงเกินจริง
+ *
+ * ชุดเดียวกับ priorityCategories เพราะ "หมวดที่เกิดทุกวัน" กับ "หมวดที่ต้องเห็นก่อน"
+ * คือเรื่องเดียวกัน: เป็นรายจ่ายที่ลดได้ทันทีในวันนี้
  */
-const DAILY_CATEGORIES: TransactionCategory[] = [
-  'อาหาร',
-  'การเดินทาง',
-]
+export const dailyEssentialCategories: readonly TransactionCategory[] = priorityCategories
+
+const DAILY_CATEGORIES = dailyEssentialCategories
 
 /** จำนวนวันและจำนวนรายการที่ต้องมี ก่อนจะเชื่อค่าเฉลี่ยที่สังเกตได้เต็มร้อย */
 const FULL_TRUST_DAYS = 30
 const FULL_TRUST_RECORDS = 12
 
-type ForecastConfidence = 'low' | 'medium' | 'high'
+export type ForecastConfidence = 'low' | 'medium' | 'high'
 export type ForecastStatus = 'insufficient' | 'safe' | 'watch' | 'risk'
 
 export interface FinancialForecast {
@@ -431,5 +438,132 @@ export const createFinancialForecast = ({
     salaryDay: normalizedSalaryDay,
     salaryPaymentsIn30Days,
     status,
+  }
+}
+
+export interface CategoryDailyBurn {
+  /** null = รายการที่ไม่ได้เลือกหมวดหมู่ */
+  category: TransactionCategory | null
+  label: string
+  total: number
+  count: number
+  /** เฉลี่ยต่อวันด้วยกฎเดียวกับ createFinancialForecast */
+  perDay: number
+  /** true = หมวดที่เกิดทุกวัน (อาหาร/การเดินทาง) */
+  isEssential: boolean
+}
+
+export interface DailyBurnBreakdown {
+  historyDays: number
+  expenseRecordCount: number
+  /** เรียงหมวดจำเป็นขึ้นก่อน แล้วค่อยเรียงจากจ่ายเยอะไปน้อย */
+  categories: CategoryDailyBurn[]
+  essentialPerDay: number
+  irregularPerDay: number
+  /** essentialPerDay + irregularPerDay = observedDailyExpense ของ forecast ชุดเดียวกัน */
+  totalPerDay: number
+}
+
+interface BurnBreakdownOptions {
+  transactions: Transaction[]
+  today: string
+  historyDays?: number
+  excludedCategories?: readonly TransactionCategory[]
+}
+
+/**
+ * แยก "เงินไหลออกวันละเท่าไร" ออกเป็นรายหมวด
+ *
+ * ใช้กฎเฉลี่ยชุดเดียวกับ createFinancialForecast (หมวดจำเป็นหารจำนวนวัน ·
+ * หมวดที่เกิดเป็นก้อนคิดเป็นต่อเดือนแล้วหาร 30) ผลรวมของทุกหมวดจึงเท่ากับ
+ * observedDailyExpense เสมอ ทำให้ตัวเลขในหน้า runway ไม่ขัดกับการ์ดอื่นในแอป
+ */
+export const buildDailyBurnBreakdown = ({
+  transactions,
+  today,
+  historyDays: windowDays = FORECAST_HISTORY_DAYS,
+  excludedCategories = [],
+}: BurnBreakdownOptions): DailyBurnBreakdown => {
+  const parsedToday = parseIsoDate(today) ?? new Date()
+  parsedToday.setHours(12, 0, 0, 0)
+
+  const excludedSet = new Set<TransactionCategory>(
+    excludedCategories.filter((category) =>
+      transactionCategories.some((option) => option.value === category),
+    ),
+  )
+
+  const todayNumber = calendarDayNumber(parsedToday)
+  const startNumber = calendarDayNumber(addDays(parsedToday, -(Math.max(1, windowDays) - 1)))
+
+  const counted = transactions.reduce<DatedTransaction[]>((items, transaction) => {
+    if (transaction.type !== 'expense') return items
+    if (transaction.category != null && excludedSet.has(transaction.category)) return items
+
+    const date = parseIsoDate(transaction.transaction_date)
+    const amount = Number(transaction.amount)
+    if (!date || !Number.isFinite(amount) || amount <= 0) return items
+
+    const dayNumber = calendarDayNumber(date)
+    if (dayNumber < startNumber || dayNumber > todayNumber) return items
+
+    items.push({ amount, date, dayNumber, transaction })
+    return items
+  }, [])
+
+  const earliest = counted.reduce<DatedTransaction | null>(
+    (found, item) => (!found || item.dayNumber < found.dayNumber ? item : found),
+    null,
+  )
+  const historyDays = earliest
+    ? Math.min(windowDays, daysBetween(earliest.date, parsedToday) + 1)
+    : 0
+
+  const groups = new Map<string, { category: TransactionCategory | null; total: number; count: number }>()
+  for (const item of counted) {
+    const key = item.transaction.category ?? ''
+    const group = groups.get(key) ?? { category: item.transaction.category ?? null, total: 0, count: 0 }
+    group.total += item.amount
+    group.count += 1
+    groups.set(key, group)
+  }
+
+  // ต้อง clamp เป็น 1 เดือน เหมือนในสูตรหลัก ไม่งั้นก้อนเดียวใน 3 วันจะกลายเป็นวันละหลายร้อย
+  const historyMonths = Math.max(historyDays / 30, 1)
+
+  const categories: CategoryDailyBurn[] = [...groups.values()]
+    .map((group) => {
+      const isEssential = group.category != null && dailyEssentialCategories.includes(group.category)
+      const perDay = historyDays === 0
+        ? 0
+        : isEssential
+          ? group.total / historyDays
+          : group.total / historyMonths / 30
+
+      return {
+        category: group.category,
+        label: group.category ?? 'ไม่ระบุหมวดหมู่',
+        total: group.total,
+        count: group.count,
+        perDay,
+        isEssential,
+      }
+    })
+    .sort((a, b) => compareCategoryPriority(a.category, b.category) || b.perDay - a.perDay)
+
+  const essentialPerDay = categories
+    .filter((item) => item.isEssential)
+    .reduce((sum, item) => sum + item.perDay, 0)
+  const irregularPerDay = categories
+    .filter((item) => !item.isEssential)
+    .reduce((sum, item) => sum + item.perDay, 0)
+
+  return {
+    historyDays,
+    expenseRecordCount: counted.length,
+    categories,
+    essentialPerDay,
+    irregularPerDay,
+    totalPerDay: essentialPerDay + irregularPerDay,
   }
 }
