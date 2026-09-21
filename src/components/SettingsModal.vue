@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useAccentTone } from '../composables/useAccentTone'
 import { useDailyReminder } from '../composables/useDailyReminder'
 import { useSalarySettings } from '../composables/useSalarySettings'
 import {
@@ -40,6 +41,10 @@ const {
   saveMonthlySalary,
   toggleSalaryVisibility,
 } = useSalarySettings()
+const { accentTone, accentToneOptions, activeSwatch, setAccentTone } = useAccentTone()
+const activeAccentHint = computed(
+  () => accentToneOptions.find((option) => option.value === accentTone.value)?.hint ?? '',
+)
 const {
   reminderEnabled,
   reminderTime,
@@ -335,6 +340,36 @@ onBeforeUnmount(() => {
           </header>
 
           <div class="settings-body">
+            <section class="setting-card accent-card">
+              <div class="setting-icon setting-icon--accent" aria-hidden="true">
+                <i :style="{ background: activeSwatch }"></i>
+              </div>
+              <div class="setting-copy">
+                <strong>สีของรายจ่ายและยอดเกินงบ</strong>
+                <p>
+                  ใช้กับหลอดงบที่เกิน, ยอดติดลบ, ปฏิทินวันที่ใช้หนัก และไอคอนรายจ่าย
+                  เลือกที่อ่านสบายตาที่สุดสำหรับคุณ
+                </p>
+                <div class="accent-options" role="radiogroup" aria-label="สีของรายจ่ายและยอดเกินงบ">
+                  <button
+                    v-for="option in accentToneOptions"
+                    :key="option.value"
+                    class="accent-option"
+                    :class="{ 'is-active': accentTone === option.value }"
+                    type="button"
+                    role="radio"
+                    :aria-checked="accentTone === option.value"
+                    :title="option.hint"
+                    @click="setAccentTone(option.value)"
+                  >
+                    <i :style="{ background: option.swatch }" aria-hidden="true"></i>
+                    <b>{{ option.label }}</b>
+                  </button>
+                </div>
+                <small class="accent-hint">{{ activeAccentHint }}</small>
+              </div>
+            </section>
+
             <form class="setting-card salary-card" @submit.prevent="submitSalary">
               <div class="setting-icon setting-icon--salary" aria-hidden="true">฿</div>
               <div class="setting-copy salary-copy">
@@ -817,6 +852,79 @@ onBeforeUnmount(() => {
   margin-bottom: 12px;
   border-color: #cfe3d7;
   background: linear-gradient(135deg, #f8fcf9, #eef8f2);
+}
+
+.accent-card {
+  align-items: start;
+  margin-bottom: 12px;
+}
+
+.setting-icon--accent {
+  background: #f1f5f2;
+}
+
+.setting-icon--accent i {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.accent-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.accent-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border: 1px solid #dce4de;
+  border-radius: 999px;
+  background: #fff;
+  font-family: 'Noto Sans Thai', sans-serif;
+  cursor: pointer;
+  transition: border-color 0.16s, background 0.16s;
+}
+
+.accent-option i {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.accent-option b {
+  color: #45534c;
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.accent-option.is-active {
+  border-color: #2f6b51;
+  background: var(--green-light);
+}
+
+.accent-option.is-active b {
+  color: #1f5c40;
+}
+
+.accent-option:focus-visible {
+  outline: 3px solid rgba(41, 116, 79, 0.28);
+  outline-offset: 1px;
+}
+
+.accent-hint {
+  display: block;
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 0.58rem;
+  line-height: 1.5;
 }
 
 .setting-icon--salary {

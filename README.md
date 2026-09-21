@@ -9,6 +9,8 @@ Money Flow รองรับการล็อกอิน, การวิเ�
 - บันทึก แก้ไข ลบ และเลือกลบธุรกรรมหลายรายการ
 - สรุปยอดคงเหลือ รายรับ และรายจ่าย
 - กราฟกระแสเงินสด, สัดส่วนหมวดหมู่ และ Heatmap
+- ปฏิทิน Heatmap เลือกได้ว่าจะไม่นับหมวดไหน
+- เลือกสีของรายจ่าย/ยอดเกินงบได้เอง (แดง, ฟ้า, เขียว)
 - หน้าวิเคราะห์ 2 มุมมอง: Runway (เงินที่เหลืออยู่ได้อีกกี่วัน) และงบ vs จ่ายจริง
 - วิเคราะห์พฤติกรรมการใช้จ่ายและคาดการณ์เงินคงเหลือ
 - งบรายวันเลือกได้ว่าจะไม่นับหมวดไหน (เช่น ค่าที่พักที่จ่ายเป็นรอบ)
@@ -30,7 +32,7 @@ Money Flow รองรับการล็อกอิน, การวิเ�
 - Lazy-loaded analytics components และ Skeleton loading
 - ดึง transaction จาก Supabase เป็นช่วงและแสดงรายการครั้งละ 50 แถว
 - Security headers และ cache policy สำหรับ Vercel
-- CI ตรวจ TypeScript, ESLint, 429 tests และ production build
+- CI ตรวจ TypeScript, ESLint, 455 tests และ production build
 
 ## เทคโนโลยี
 
@@ -214,8 +216,8 @@ npm run build
 สถานะชุดทดสอบล่าสุด:
 
 ```text
-19 test files passed
-429 tests passed
+23 test files passed
+455 tests passed
 0 tests failed
 ```
 
@@ -389,6 +391,8 @@ src/
     MoneyBuddy.vue               คาดการณ์สถานะเงิน
   composables/
     useAuth.ts                   session, login และ password recovery
+    useAccentTone.ts             สีของรายจ่าย/ยอดเกินงบที่ผู้ใช้เลือกเอง
+    useHeatmapFilter.ts          หมวดที่ไม่ให้ปฏิทินนับ
     useTransactions.ts           fetch/mutate และ offline integration
     useOfflineQueue.ts           queue และ sync รายการ offline
     useNavigation.ts             route/hash state

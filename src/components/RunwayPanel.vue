@@ -345,7 +345,7 @@ const cutLabel = (days: number | null) => (days === null ? 'ไม่มีก�
 
 .runway-hero { display: grid; align-items: center; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 14px; padding: 14px 15px; border: 1px solid rgba(50,131,91,.3); border-radius: 16px; background: rgba(50,131,91,.05); }
 .runway-hero--watch { border-color: rgba(63,160,171,.45); background: rgba(63,160,171,.08); }
-.runway-hero--risk { border-color: rgba(111,94,184,.42); background: rgba(111,94,184,.07); }
+.runway-hero--risk { border-color: var(--alert-line); background: var(--alert-tint); }
 .runway-hero--insufficient { border-color: var(--line); background: #f7faf8; }
 .runway-hero__main { display: grid; gap: 2px; }
 .runway-hero__main small { color: var(--muted); font-size: .53rem; font-weight: 800; letter-spacing: .05em; }
@@ -380,7 +380,7 @@ const cutLabel = (days: number | null) => (days === null ? 'ไม่มีก�
 .runway-scenarios { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
 .runway-scenarios li { display: grid; gap: 3px; padding: 10px 11px; border: 1px solid var(--line); border-radius: 13px; }
 .runway-scenarios li.is-ok { border-color: rgba(50,131,91,.32); background: rgba(50,131,91,.05); }
-.runway-scenarios li.is-risk { border-color: rgba(111,94,184,.34); background: rgba(111,94,184,.05); }
+.runway-scenarios li.is-risk { border-color: var(--alert-line); background: var(--alert-tint); }
 .runway-scenarios li.is-off { background: #f7faf8; }
 .runway-scenarios li.is-primary { box-shadow: 0 0 0 2px rgba(41,116,79,.14); }
 .runway-scenarios__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }

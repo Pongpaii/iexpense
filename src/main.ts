@@ -1,8 +1,12 @@
 import { createApp, h } from 'vue'
 import App from './App.vue'
 import ErrorBoundary from './components/ErrorBoundary.vue'
+import { initializeAccentTone } from './composables/useAccentTone'
 import { initMonitoring, reportError } from './lib/monitoring'
 import './style.css'
+
+// ทาสีที่ผู้ใช้เลือกไว้ก่อน Vue render เพื่อไม่ให้เห็นสีเริ่มต้นแวบหนึ่ง
+initializeAccentTone()
 
 // ครอบ App ด้วย ErrorBoundary ที่ระดับ root: ถ้า component ไหนพังกลางทาง
 // ผู้ใช้จะเห็นการ์ดบอกวิธีแก้ ไม่ใช่หน้าจอขาวเปล่า ๆ

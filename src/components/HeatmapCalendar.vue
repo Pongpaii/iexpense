@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useDailyCap } from '../composables/useDailyCap'
-import type { Transaction } from '../types/transaction'
+import { useHeatmapFilter } from '../composables/useHeatmapFilter'
+import { getCategoryEmoji, type Transaction, type TransactionCategory } from '../types/transaction'
 import {
   getDaysInMonth,
   getFirstDayOfWeek,
@@ -27,6 +28,32 @@ const emit = defineEmits<{
 }>()
 
 const { capEnabled, capForDate } = useDailyCap()
+const {
+  hiddenCategories,
+  hasHiddenCategories,
+  hideableCategories,
+  isCategoryHidden,
+  toggleCategoryHidden,
+  showAllCategories,
+} = useHeatmapFilter()
+
+const filterOpen = ref(false)
+
+/** รายการที่ปฏิทินนับจริง ตัดหมวดที่ผู้ใช้สั่งซ่อนออกก่อนคำนวณทุกอย่าง */
+const visibleTransactions = computed(() => {
+  if (!hasHiddenCategories.value) return props.transactions
+  return props.transactions.filter(
+    ({ category }) => category == null || !hiddenCategories.value.includes(category),
+  )
+})
+
+const hiddenSummary = computed(() =>
+  hiddenCategories.value.map((category) => `${getCategoryEmoji(category)} ${category}`).join(' · '),
+)
+
+const onToggleCategory = (category: TransactionCategory) => {
+  toggleCategoryHidden(category)
+}
 
 const todayDate = toLocalIsoDate(new Date())
 const todayMonth = todayDate.slice(0, 7)
@@ -68,7 +95,7 @@ const totalsByDate = computed(() => {
   const prefix = viewMonth.value
   const map = new Map<string, DayTotals>()
 
-  for (const transaction of props.transactions) {
+  for (const transaction of visibleTransactions.value) {
     if (!transaction.transaction_date.startsWith(prefix)) continue
 
     const bucket = map.get(transaction.transaction_date) ?? { expense: 0, income: 0, count: 0 }
@@ -241,6 +268,41 @@ const legendLabels = computed(() =>
       </div>
     </header>
 
+    <div class="heatmap-filter">
+      <button
+        class="heatmap-filter__toggle"
+        type="button"
+        :aria-expanded="filterOpen"
+        aria-controls="heatmap-filter-panel"
+        @click="filterOpen = !filterOpen"
+      >
+        {{ hasHiddenCategories ? `ซ่อนอยู่ ${hiddenCategories.length} หมวด` : 'เลือกหมวดที่จะแสดง' }}
+      </button>
+      <small v-if="hasHiddenCategories">ไม่นับ {{ hiddenSummary }}</small>
+    </div>
+
+    <div v-if="filterOpen" id="heatmap-filter-panel" class="heatmap-filter__panel">
+      <p>ติ๊กหมวดที่ไม่ต้องให้ปฏิทินนับ เช่น ค่าที่พักที่จ่ายก้อนเดียวทุกเดือน จะเห็นชัดขึ้นว่าวันไหนใช้จริงเยอะ</p>
+      <div class="heatmap-chips">
+        <label
+          v-for="option in hideableCategories"
+          :key="option.value"
+          class="heatmap-chip"
+          :class="{ 'is-off': isCategoryHidden(option.value) }"
+        >
+          <input
+            type="checkbox"
+            :checked="isCategoryHidden(option.value)"
+            @change="onToggleCategory(option.value)"
+          />
+          <span>{{ option.emoji }} {{ option.value }}</span>
+        </label>
+      </div>
+      <button v-if="hasHiddenCategories" type="button" @click="showAllCategories()">
+        แสดงทุกหมวดเหมือนเดิม
+      </button>
+    </div>
+
     <div class="heatmap-stats">
       <span><small>รายจ่ายเดือนนี้</small><b>{{ formatBaht(monthExpense) }}</b></span>
       <span><small>วันที่มีรายจ่าย</small><b>{{ activeDayCount }} วัน</b></span>
@@ -384,6 +446,100 @@ const legendLabels = computed(() =>
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.heatmap-filter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.heatmap-filter__toggle {
+  padding: 5px 10px;
+  border: 1px solid #dce4de;
+  border-radius: 999px;
+  color: #2f6b51;
+  background: #fff;
+  font-family: 'Noto Sans Thai', sans-serif;
+  font-size: 0.6rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.heatmap-filter small {
+  color: var(--muted);
+  font-family: 'Noto Sans Thai', sans-serif;
+  font-size: 0.55rem;
+}
+
+.heatmap-filter__panel {
+  display: grid;
+  gap: 8px;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f8fbf9;
+}
+
+.heatmap-filter__panel p {
+  margin: 0;
+  color: var(--muted);
+  font-family: 'Noto Sans Thai', sans-serif;
+  font-size: 0.58rem;
+  line-height: 1.55;
+}
+
+.heatmap-filter__panel > button {
+  justify-self: start;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 8px;
+  color: #2f6b51;
+  background: var(--green-light);
+  font-family: 'Noto Sans Thai', sans-serif;
+  font-size: 0.6rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.heatmap-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.heatmap-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border: 1px solid #dbe4de;
+  border-radius: 999px;
+  color: #45534c;
+  background: #fff;
+  font-family: 'Noto Sans Thai', sans-serif;
+  font-size: 0.6rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.heatmap-chip input {
+  width: 12px;
+  height: 12px;
+  accent-color: #2f6b51;
+}
+
+.heatmap-chip.is-off {
+  border-color: var(--alert-line);
+  color: var(--alert-muted);
+  background: var(--alert-tint);
+  text-decoration: line-through;
+}
+
+.heatmap-chip:focus-within {
+  outline: 3px solid rgba(41, 116, 79, 0.22);
+  outline-offset: 1px;
 }
 
 .heatmap-stats span {

@@ -722,7 +722,7 @@ onBeforeUnmount(() => {
 
 .buddy-card--overwhelmed .mood-badge {
   color: var(--alert-text);
-  background: rgba(111, 94, 184, 0.12);
+  background: var(--alert-tint);
 }
 
 .buddy-card--overwhelmed .mood-badge i {
@@ -928,7 +928,7 @@ onBeforeUnmount(() => {
 }
 
 .forecast-panel--risk .forecast-status {
-  color: var(--alert-text);
+  color: var(--alert-ink);
   background: var(--alert-line);
 }
 
