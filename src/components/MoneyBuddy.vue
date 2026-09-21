@@ -5,6 +5,7 @@ import { useSalarySettings } from '../composables/useSalarySettings'
 import { getCategoryEmoji, type Transaction, type TransactionCategory } from '../types/transaction'
 import { createFinancialForecast } from '../utils/forecast'
 import { formatBaht, formatDate } from '../utils/format'
+import { summarizeMonthSpending } from '../utils/monthSpending'
 
 type Mood = 'ready' | 'happy' | 'worried' | 'overwhelmed' | 'crying'
 
@@ -69,13 +70,32 @@ const onToggleCategory = (category: TransactionCategory) => {
   toggleCategoryExcluded(category)
 }
 
-const spendingRatio = computed(() => {
-  if (props.income <= 0) return props.expense > 0 ? 100 : 0
-  return Math.round((props.expense / props.income) * 100)
+const monthSpending = computed(() =>
+  summarizeMonthSpending({
+    transactions: props.transactions,
+    month: currentDate.value.slice(0, 7),
+    monthlySalary: monthlySalary.value,
+  }),
+)
+
+const spendingRatio = computed(() => monthSpending.value.ratio)
+
+/** บอกให้ชัดว่า % ที่เห็นหารด้วยอะไร ไม่งั้นผู้ใช้เดาไม่ออกว่าเลขมาจากไหน */
+const meterBaseLabel = computed(() => {
+  const summary = monthSpending.value
+
+  if (!summary.hasIncomeBase) return 'เดือนนี้ยังไม่มีรายรับและยังไม่ได้ตั้งเงินเดือน'
+  if (summary.usesSalaryBase) {
+    return salaryHidden.value
+      ? 'เทียบกับเงินเดือนที่ตั้งไว้ (รอบนี้ยังไม่เข้า)'
+      : `เทียบกับเงินเดือนที่ตั้งไว้ ${formatBaht(summary.incomeBase)}`
+  }
+  return `เทียบกับรายรับเดือนนี้ ${formatBaht(summary.incomeBase)}`
 })
 
 const mood = computed<Mood>(() => {
   const result = forecast.value
+  const month = monthSpending.value
 
   if (props.income === 0 && props.expense === 0 && !result.hasSpendingData) return 'ready'
   // โหมดให้กำลังใจ: ยอดติดลบไม่ควรทำให้น้องร้องไห้ใส่หน้าผู้ใช้ทุกครั้งที่เปิดแอป
@@ -83,7 +103,7 @@ const mood = computed<Mood>(() => {
   // ข้อมูลยังน้อยเกินกว่าจะตัดสิน อย่าทำให้ผู้ใช้ใหม่ตกใจด้วยเลขที่ยังเชื่อไม่ได้
   if (result.status === 'insufficient') return 'ready'
   if (result.status === 'risk') return 'overwhelmed'
-  if (props.expense > 0 && (props.income <= 0 || spendingRatio.value >= 80)) {
+  if (month.expense > 0 && (!month.hasIncomeBase || spendingRatio.value >= 80)) {
     return 'overwhelmed'
   }
   if (result.status === 'watch' || spendingRatio.value >= 50) return 'worried'
@@ -355,13 +375,13 @@ onBeforeUnmount(() => {
 
       <div class="spending-meter">
         <div class="meter-label">
-          <span>ใช้ไป {{ spendingRatio }}% ของรายรับ</span>
-          <strong>{{ formatBaht(expense) }}</strong>
+          <span>เดือนนี้ใช้ไป {{ spendingRatio }}% ของรายรับ</span>
+          <strong>{{ formatBaht(monthSpending.expense) }}</strong>
         </div>
         <div
           class="meter-track"
           role="progressbar"
-          aria-label="สัดส่วนรายจ่ายต่อรายรับ"
+          aria-label="สัดส่วนรายจ่ายเดือนนี้ต่อรายรับเดือนนี้"
           :aria-valuenow="Math.min(spendingRatio, 100)"
           aria-valuemin="0"
           aria-valuemax="100"
@@ -371,6 +391,7 @@ onBeforeUnmount(() => {
         <div class="meter-zones" aria-hidden="true">
           <span>สบายใจ</span><span>ระวัง</span><span>สูง</span>
         </div>
+        <p class="meter-base">{{ meterBaseLabel }}</p>
       </div>
     </div>
 
@@ -809,6 +830,13 @@ onBeforeUnmount(() => {
   color: var(--ink);
   font-family: 'Manrope', sans-serif;
   font-size: 0.7rem;
+}
+
+.meter-base {
+  margin: 6px 0 0;
+  color: #7d8b85;
+  font-family: 'Noto Sans Thai', sans-serif;
+  font-size: 0.58rem;
 }
 
 .meter-track {
