@@ -538,8 +538,8 @@ h1 {
   margin: 3px 0 0;
   padding: 9px 11px;
   border-radius: 9px;
-  color: #a13c36;
-  background: #fff0ee;
+  color: var(--alert-ink);
+  background: var(--alert-tint);
   font-size: 0.66rem;
   line-height: 1.55;
   text-align: left;

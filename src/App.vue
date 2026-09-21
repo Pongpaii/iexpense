@@ -874,9 +874,9 @@ onMounted(() => void auth.initialize())
   align-items: center;
   gap: 7px;
   padding: 5px 9px;
-  border: 1px solid rgba(240, 190, 108, 0.4);
+  border: 1px solid rgba(127, 201, 209, 0.4);
   border-radius: 10px;
-  background: rgba(240, 190, 108, 0.16);
+  background: rgba(127, 201, 209, 0.16);
 }
 
 .offline-dot {
@@ -884,7 +884,7 @@ onMounted(() => void auth.initialize())
   height: 7px;
   flex: 0 0 7px;
   border-radius: 50%;
-  background: #f0be6c;
+  background: var(--watch-soft);
 }
 
 .offline-badge--syncing .offline-dot {
@@ -909,7 +909,7 @@ onMounted(() => void auth.initialize())
 
 .offline-copy b {
   overflow: hidden;
-  color: #f7e2bd;
+  color: #d7f0f3;
   font-size: 0.58rem;
   font-weight: 700;
   text-overflow: ellipsis;
@@ -918,9 +918,9 @@ onMounted(() => void auth.initialize())
 
 .offline-retry {
   padding: 4px 7px;
-  border: 1px solid rgba(247, 226, 189, 0.35);
+  border: 1px solid rgba(215, 240, 243, 0.35);
   border-radius: 7px;
-  color: #f7e2bd;
+  color: #d7f0f3;
   background: transparent;
   font-family: 'Noto Sans Thai', sans-serif;
   font-size: 0.55rem;
@@ -930,7 +930,7 @@ onMounted(() => void auth.initialize())
 
 .offline-retry:hover {
   color: #194d3b;
-  background: #f7e2bd;
+  background: #d7f0f3;
 }
 
 .offline-retry:focus-visible {
@@ -979,7 +979,7 @@ onMounted(() => void auth.initialize())
 
 .logout-trigger:hover:not(:disabled) {
   color: #194d3b;
-  background: #f1d5d1;
+  background: var(--alert-line);
 }
 
 .logout-trigger:focus-visible,
@@ -1024,7 +1024,7 @@ onMounted(() => void auth.initialize())
 }
 
 .achievements-trigger:hover {
-  background: rgba(240, 214, 108, 0.22);
+  background: rgba(143, 208, 106, 0.22);
   transform: translateY(-1px);
 }
 
@@ -1101,9 +1101,9 @@ onMounted(() => void auth.initialize())
   gap: 11px;
   margin-bottom: 11px;
   padding: 11px 13px;
-  border: 1px solid #e5dcc0;
+  border: 1px solid var(--cheer-line);
   border-radius: 13px;
-  background: #fcf8ea;
+  background: var(--cheer-tint);
   font-family: 'Noto Sans Thai', sans-serif;
 }
 
@@ -1113,18 +1113,18 @@ onMounted(() => void auth.initialize())
   height: 38px;
   place-items: center;
   border-radius: 11px;
-  background: #f5eccc;
+  background: var(--cheer-line);
   font-size: 1rem;
 }
 
 .demo-banner__copy strong {
-  color: #6f5c22;
+  color: var(--cheer-ink);
   font-size: 0.74rem;
 }
 
 .demo-banner__copy p {
   margin: 2px 0 0;
-  color: #8d7c4e;
+  color: var(--cheer-text);
   font-size: 0.62rem;
   line-height: 1.5;
 }
@@ -1143,12 +1143,12 @@ onMounted(() => void auth.initialize())
 }
 
 .demo-badge {
-  border-color: rgba(240, 214, 108, 0.35) !important;
-  background: rgba(240, 214, 108, 0.14) !important;
+  border-color: rgba(143, 208, 106, 0.35) !important;
+  background: rgba(143, 208, 106, 0.14) !important;
 }
 
 .demo-badge .connection-dot {
-  background: #f0d66c;
+  background: var(--cheer);
 }
 
 .undo-toast {

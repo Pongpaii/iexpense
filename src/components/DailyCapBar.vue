@@ -475,7 +475,7 @@ const spareLevel = computed(() => {
 }
 
 .cap-filter__chip input { width: 12px; height: 12px; accent-color: #2f6b51; }
-.cap-filter__chip.is-off { border-color: #e3c7c2; color: #9b6a63; background: #fdf6f5; text-decoration: line-through; }
+.cap-filter__chip.is-off { border-color: var(--alert-line); color: var(--alert-muted); background: var(--alert-tint); text-decoration: line-through; }
 .cap-filter__chip:focus-within { outline: 3px solid rgba(41, 116, 79, 0.22); outline-offset: 1px; }
 
 .cap-filter__reset {
@@ -491,7 +491,7 @@ const spareLevel = computed(() => {
 }
 
 .cap-excluded {
-  color: #9b6a63;
+  color: var(--alert-muted);
   font-size: 0.58rem;
   line-height: 1.5;
 }
@@ -529,16 +529,16 @@ const spareLevel = computed(() => {
 }
 
 .cap-card--watch .cap-track--main .cap-fill { background: linear-gradient(90deg, #7fbe63, var(--lime)); }
-.cap-card--warn .cap-track--main .cap-fill { background: linear-gradient(90deg, #e0a83d, #f0cf6c); }
-.cap-card--full .cap-track--main .cap-fill { background: linear-gradient(90deg, #d1863c, #e6a94f); }
+.cap-card--warn .cap-track--main .cap-fill { background: linear-gradient(90deg, var(--watch), var(--watch-soft)); }
+.cap-card--full .cap-track--main .cap-fill { background: linear-gradient(90deg, var(--watch-strong), var(--watch)); }
 
 .cap-card--over .cap-track--main .cap-fill {
-  background: repeating-linear-gradient(-45deg, var(--red) 0 9px, #d96a60 9px 18px);
+  background: repeating-linear-gradient(-45deg, var(--alert) 0 9px, var(--alert-soft) 9px 18px);
   animation: cap-pulse 1.5s ease-in-out infinite;
 }
 
-.cap-card--over { border-color: #eec6c1; background: #fffafa; }
-.cap-card--full { border-color: #eed9bd; }
+.cap-card--over { border-color: var(--alert-line); background: var(--alert-tint); }
+.cap-card--full { border-color: var(--watch-line); }
 
 @keyframes cap-pulse {
   0%, 100% { opacity: 1; }
@@ -559,8 +559,8 @@ const spareLevel = computed(() => {
 }
 
 .cap-card--warn .cap-status b,
-.cap-card--full .cap-status b { color: #98661f; }
-.cap-card--over .cap-status b { color: var(--red); }
+.cap-card--full .cap-status b { color: var(--watch-ink); }
+.cap-card--over .cap-status b { color: var(--alert-text); }
 
 .cap-status span {
   color: var(--muted);
@@ -680,18 +680,18 @@ const spareLevel = computed(() => {
 .cap-slot--empty .cap-fill { background: #dfe5e1; }
 .cap-slot--watch .cap-fill { background: linear-gradient(90deg, #7fbe63, #a9dd6b); }
 
-.cap-slot--warn .cap-fill { background: linear-gradient(90deg, #e0a83d, #f0cf6c); }
-.cap-slot--warn .cap-slot__status { color: #98661f; }
+.cap-slot--warn .cap-fill { background: linear-gradient(90deg, var(--watch), var(--watch-soft)); }
+.cap-slot--warn .cap-slot__status { color: var(--watch-ink); }
 
-.cap-slot--full .cap-fill { background: linear-gradient(90deg, #d1863c, #e6a94f); }
-.cap-slot--full .cap-slot__status { color: #98661f; }
+.cap-slot--full .cap-fill { background: linear-gradient(90deg, var(--watch-strong), var(--watch)); }
+.cap-slot--full .cap-slot__status { color: var(--watch-ink); }
 
 .cap-slot--over .cap-fill {
-  background: repeating-linear-gradient(-45deg, var(--red) 0 7px, #d96a60 7px 14px);
+  background: repeating-linear-gradient(-45deg, var(--alert) 0 7px, var(--alert-soft) 7px 14px);
 }
 
 .cap-slot--over .cap-slot__amount b,
-.cap-slot--over .cap-slot__status { color: var(--red); }
+.cap-slot--over .cap-slot__status { color: var(--alert-text); }
 
 .cap-slot--spare {
   padding-top: 8px;

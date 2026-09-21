@@ -313,10 +313,10 @@ watch(
 
 .read-only-chip {
   padding: 4px 8px;
-  border: 1px solid #e0d7bd;
+  border: 1px solid var(--cheer-line);
   border-radius: 999px;
-  color: #8a7333;
-  background: #fbf5e4;
+  color: var(--cheer-text);
+  background: var(--cheer-tint);
   font-family: 'Noto Sans Thai', sans-serif;
   font-size: 0.55rem;
   font-weight: 700;
@@ -372,7 +372,7 @@ watch(
   padding: 6px 10px;
   border: 0;
   color: white;
-  background: #bd4941;
+  background: var(--alert);
 }
 
 .spinner--small {

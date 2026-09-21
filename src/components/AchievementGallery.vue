@@ -218,9 +218,9 @@ onBeforeUnmount(() => {
 .gallery-note {
   margin: 0;
   padding: 9px 16px;
-  border-bottom: 1px solid #e5dcc0;
-  color: #8d7c4e;
-  background: #fcf8ea;
+  border-bottom: 1px solid var(--cheer-line);
+  color: var(--cheer-text);
+  background: var(--cheer-tint);
   font-size: 0.6rem;
 }
 
@@ -265,7 +265,7 @@ onBeforeUnmount(() => {
   margin-bottom: 4px;
   place-items: center;
   border-radius: 50%;
-  background: radial-gradient(circle at 32% 28%, #fff3c4, #f0d66c 62%, #d9b13f);
+  background: radial-gradient(circle at 32% 28%, #f6ffe2, #c9f06c 62%, #8fd06a);
   font-size: 1.4rem;
   line-height: 1;
 }

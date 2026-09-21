@@ -259,7 +259,7 @@ onBeforeUnmount(() => clearTimeout(unlockTimer))
 .field-error {
   display: block;
   margin-top: 4px;
-  color: #b3261e;
+  color: var(--alert-ink);
   font-family: 'Noto Sans Thai', sans-serif;
   font-size: 0.6rem;
   font-weight: 600;
@@ -268,7 +268,7 @@ onBeforeUnmount(() => clearTimeout(unlockTimer))
 
 /* ให้ขอบ input เปลี่ยนสีเมื่อ validate ไม่ผ่าน ไม่ใช่แค่ข้อความข้างล่าง */
 .field input[aria-invalid='true'] {
-  border-color: #d8574d;
+  border-color: var(--alert-soft);
   background: #fdf6f5;
 }
 

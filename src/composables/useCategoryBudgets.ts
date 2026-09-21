@@ -223,7 +223,7 @@ const persist = async (next: CategoryBudget[]) => {
 /**
  * งบรายหมวดต่อเดือน เก็บใน user_settings.category_budgets_json
  *
- * ซิงก์ข้ามแท็บด้วย storage event แบบเดียวกับ useTheme ไม่ได้ใช้ realtime channel
+ * ซิงก์ข้ามแท็บด้วย storage event แบบเดียวกับ preference อื่น ไม่ได้ใช้ realtime channel
  * เพราะการตั้งค่าเปลี่ยนน้อยมาก ไม่คุ้มกับการเปิด websocket ค้างไว้
  */
 export const useCategoryBudgets = () => {

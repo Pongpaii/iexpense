@@ -94,8 +94,8 @@ const reload = () => {
   height: 40px;
   place-items: center;
   border-radius: 50%;
-  color: #7a2b24;
-  background: #f1d5d1;
+  color: var(--alert-ink);
+  background: var(--alert-line);
   font-size: 1.2rem;
   font-weight: 800;
 }

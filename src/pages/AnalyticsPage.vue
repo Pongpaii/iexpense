@@ -39,7 +39,7 @@ withDefaults(defineProps<{ transactions: Transaction[]; readOnly?: boolean }>(),
 
 <template>
   <section class="app-page analytics-page">
-    <!-- คลาส overview-tabs ติดไว้เพื่อให้ธีม opium ทาสีให้เหมือน tab อื่นในแอป -->
+    <!-- คลาส overview-tabs ติดไว้เพื่อให้หน้าตาเหมือน tab อื่นในแอป -->
     <div class="overview-tabs analytics-tabs" role="tablist" aria-label="มุมมองการวิเคราะห์">
       <button
         v-for="tab in tabs"

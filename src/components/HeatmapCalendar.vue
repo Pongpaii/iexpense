@@ -408,11 +408,11 @@ const legendLabels = computed(() =>
 }
 
 .heatmap-stats__warn {
-  background: var(--red-light);
+  background: var(--alert-tint);
 }
 
 .heatmap-stats__warn b {
-  color: #8b322c;
+  color: var(--alert-ink);
 }
 
 .heatmap-weekdays,
@@ -503,7 +503,7 @@ const legendLabels = computed(() =>
 }
 
 .heatmap-cell__expense {
-  color: #c2410c;
+  color: var(--alert-text);
   font-size: 0.6rem;
   font-weight: 800;
 }
@@ -518,10 +518,10 @@ const legendLabels = computed(() =>
 .heatmap-cell--level-1 { border-color: #eaf4dc; background: #f4faea; }
 .heatmap-cell--level-2 { border-color: #dcefc4; background: #ebf7d8; }
 .heatmap-cell--level-3 { border-color: #cfe9ab; background: #e0f2c4; }
-.heatmap-cell--level-4 { border-color: #f2e4b0; background: #fdf6dd; }
-.heatmap-cell--level-5 { border-color: #f8cfcf; background: #fff5f5; }
+.heatmap-cell--level-4 { border-color: var(--watch-line); background: var(--watch-tint); }
+.heatmap-cell--level-5 { border-color: var(--alert-line); background: var(--alert-tint); }
 
-.heatmap-cell--level-5 .heatmap-cell__expense { color: #b91c1c; }
+.heatmap-cell--level-5 .heatmap-cell__expense { color: var(--alert-ink); }
 
 .heatmap-tooltip {
   margin: 0;
@@ -564,8 +564,8 @@ const legendLabels = computed(() =>
 .heatmap-swatch--1 { border-color: #eaf4dc; background: #f4faea; }
 .heatmap-swatch--2 { border-color: #dcefc4; background: #ebf7d8; }
 .heatmap-swatch--3 { border-color: #cfe9ab; background: #e0f2c4; }
-.heatmap-swatch--4 { border-color: #f2e4b0; background: #fdf6dd; }
-.heatmap-swatch--5 { border-color: #f8cfcf; background: #fff5f5; }
+.heatmap-swatch--4 { border-color: var(--watch-line); background: var(--watch-tint); }
+.heatmap-swatch--5 { border-color: var(--alert-line); background: var(--alert-tint); }
 
 @media (max-width: 580px) {
   .heatmap-card { padding: 11px; }

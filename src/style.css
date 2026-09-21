@@ -13,8 +13,33 @@
   --green: #194d3b;
   --green-light: #dcece3;
   --lime: #c9f06c;
-  --red: #c94f45;
-  --red-light: #f9e5e2;
+  /**
+   * โทนสถานะของแอปตั้งใจไม่ใช้แดงและส้ม เพราะผู้ใช้เปิดแอปมาเจอตัวเลขของตัวเอง
+   * ทุกวัน สีเตือนภัยทำให้รู้สึกผิดกับการใช้เงินแทนที่จะอยากจดต่อ
+   * - alert = รายจ่าย / เกินงบ / ผิดพลาด (ม่วงอมฟ้า อ่านง่ายแต่ไม่ตะโกน)
+   * - watch = ใกล้ถึงขีด / ต้องรู้ไว้ (ฟ้าอมเขียว)
+   * - cheer = ความสำเร็จ / โหมด Demo / ของดี (ไลม์ของแบรนด์)
+   */
+  --alert-ink: #4c4185;
+  --alert-text: #5b4e9c;
+  --alert: #6f5eb8;
+  --alert-soft: #9b8bd8;
+  --alert-line: #d5cdf0;
+  --alert-tint: #f3f0fc;
+  --alert-muted: #6f6392;
+  --watch-ink: #185d66;
+  --watch-text: #1f7480;
+  --watch: #3fa0ab;
+  --watch-strong: #2a7f8a;
+  --watch-soft: #7fc9d1;
+  --watch-line: #cbe7ea;
+  --watch-tint: #eef8fa;
+  --cheer-ink: #47691f;
+  --cheer-text: #4f7524;
+  --cheer: #8fd06a;
+  --cheer-soft: #c9f06c;
+  --cheer-line: #d7ecb0;
+  --cheer-tint: #f4fbe8;
   --line: #e2e6df;
   --shadow: 0 20px 60px rgba(23, 45, 36, 0.09);
 }
@@ -144,8 +169,8 @@ fieldset:disabled button {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #d6a44f;
-  box-shadow: 0 0 0 4px rgba(214, 164, 79, 0.15);
+  background: var(--watch);
+  box-shadow: 0 0 0 4px rgba(63, 160, 171, 0.15);
 }
 
 .connection-badge.connected .connection-dot {
@@ -247,8 +272,8 @@ fieldset:disabled button {
 }
 
 .summary-card--expense .summary-card__icon {
-  color: var(--red);
-  background: var(--red-light);
+  color: var(--alert-text);
+  background: var(--alert-tint);
 }
 
 .summary-card p {
@@ -283,9 +308,9 @@ fieldset:disabled button {
 }
 
 .setup-notice {
-  border: 1px solid #e7d9a7;
-  color: #6f5a1e;
-  background: #fff9df;
+  border: 1px solid var(--watch-line);
+  color: var(--watch-ink);
+  background: var(--watch-tint);
 }
 
 .setup-notice__icon,
@@ -297,14 +322,14 @@ fieldset:disabled button {
   place-items: center;
   border-radius: 50%;
   color: white;
-  background: #bd9224;
+  background: var(--watch-strong);
   font-size: 0.76rem;
   font-weight: 800;
 }
 
 .setup-notice p {
   margin: 3px 0 0;
-  color: #8a7435;
+  color: var(--watch-text);
   font-size: 0.82rem;
   line-height: 1.6;
 }
@@ -312,19 +337,19 @@ fieldset:disabled button {
 code {
   padding: 2px 5px;
   border-radius: 5px;
-  color: #59460f;
-  background: rgba(189, 146, 36, 0.12);
+  color: var(--watch-ink);
+  background: rgba(47, 139, 150, 0.12);
   font-family: Consolas, monospace;
 }
 
 .alert--error {
-  color: #8b322c;
-  border: 1px solid #efc4bf;
-  background: #fff0ee;
+  color: var(--alert-ink);
+  border: 1px solid var(--alert-line);
+  background: var(--alert-tint);
 }
 
 .alert--error > span {
-  background: var(--red);
+  background: var(--alert);
 }
 
 .alert button {
@@ -403,7 +428,7 @@ code {
 .text-button {
   padding: 5px;
   border: 0;
-  color: var(--red);
+  color: var(--alert-text);
   background: transparent;
   font-family: 'Noto Sans Thai', sans-serif;
   font-size: 0.78rem;
@@ -543,7 +568,7 @@ code {
 }
 
 .type-dot--expense {
-  background: var(--red);
+  background: var(--alert);
 }
 
 .primary-button {
@@ -628,8 +653,8 @@ code {
 }
 
 .transaction-icon--expense {
-  color: var(--red);
-  background: var(--red-light);
+  color: var(--alert-text);
+  background: var(--alert-tint);
 }
 
 .transaction-info,
@@ -669,7 +694,7 @@ code {
 }
 
 .amount--expense strong {
-  color: var(--red);
+  color: var(--alert-text);
 }
 
 .transaction-actions {
@@ -694,8 +719,8 @@ code {
 }
 
 .icon-button--danger:hover {
-  color: var(--red);
-  background: var(--red-light);
+  color: var(--alert-text);
+  background: var(--alert-tint);
 }
 
 .state-box {
@@ -892,8 +917,8 @@ code {
 
 /* The visible date control border lives on its wrapper on iOS. */
 .date-input-wrap--invalid {
-  border-color: #d8574d;
-  background: #fdf6f5;
+  border-color: var(--alert-soft);
+  background: var(--alert-tint);
 }
 
 /* Installed PWA behavior and iPhone safe areas */

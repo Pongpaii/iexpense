@@ -5,26 +5,19 @@ import {
   type TransactionType,
 } from '../types/transaction'
 
+/**
+ * สีของกราฟตั้งใจไม่มีแดงและส้ม เพราะหมวดที่จ่ายเยอะมักได้สีแรก ๆ
+ * ถ้าเป็นสีเตือนภัยผู้ใช้จะอ่านกราฟเป็น "ทำผิด" ทั้งที่มันเป็นแค่สัดส่วน
+ */
 export const categoryPalette = [
   '#398d67',
   '#67ae86',
   '#9cc16f',
-  '#e0aa4c',
-  '#dd7a63',
-  '#9a79b8',
+  '#3fa0ab',
+  '#7d6cc4',
+  '#b98fcf',
   '#5b91b7',
   '#c77794',
-]
-
-export const opiumCategoryPalette = [
-  '#ff174f',
-  '#c4002f',
-  '#ff5a7e',
-  '#8d1735',
-  '#f2ece8',
-  '#9c8f95',
-  '#6c2035',
-  '#d9d0d4',
 ]
 
 export interface CategorySlice {

@@ -658,13 +658,13 @@ onBeforeUnmount(() => {
 }
 
 .buddy-card--worried {
-  border-color: #ebdda7;
-  background: linear-gradient(125deg, #fffdf6, #fff8dc);
+  border-color: var(--watch-line);
+  background: linear-gradient(125deg, #fbfeff, var(--watch-tint));
 }
 
 .buddy-card--overwhelmed {
-  border-color: #e8d5c4;
-  background: linear-gradient(125deg, #fffcf8, #fff5eb);
+  border-color: var(--alert-line);
+  background: linear-gradient(125deg, #fdfcff, var(--alert-tint));
 }
 
 .buddy-card--crying {
@@ -712,21 +712,21 @@ onBeforeUnmount(() => {
 }
 
 .buddy-card--worried .mood-badge {
-  color: #887126;
-  background: rgba(206, 167, 49, 0.13);
+  color: var(--watch-text);
+  background: rgba(63, 160, 171, 0.13);
 }
 
 .buddy-card--worried .mood-badge i {
-  background: #d0a52c;
+  background: var(--watch);
 }
 
 .buddy-card--overwhelmed .mood-badge {
-  color: #8b5e3c;
-  background: rgba(200, 130, 70, 0.12);
+  color: var(--alert-text);
+  background: rgba(111, 94, 184, 0.12);
 }
 
 .buddy-card--overwhelmed .mood-badge i {
-  background: #d4844a;
+  background: var(--alert-soft);
 }
 
 .buddy-card--crying .mood-badge {
@@ -843,7 +843,7 @@ onBeforeUnmount(() => {
   height: 9px;
   overflow: hidden;
   border-radius: 99px;
-  background: linear-gradient(90deg, #dfece5 0 50%, #f6ebbd 50% 80%, #f3d2cf 80%);
+  background: linear-gradient(90deg, #dfece5 0 50%, var(--watch-line) 50% 80%, var(--alert-line) 80%);
 }
 
 .meter-track > span {
@@ -856,11 +856,11 @@ onBeforeUnmount(() => {
 }
 
 .buddy-card--worried .meter-track > span {
-  background: #d2a62e;
+  background: var(--watch);
 }
 
 .buddy-card--crying .meter-track > span {
-  background: #d45d54;
+  background: var(--alert-soft);
 }
 
 .meter-zones {
@@ -923,13 +923,13 @@ onBeforeUnmount(() => {
 }
 
 .forecast-panel--watch .forecast-status {
-  color: #846b20;
-  background: #f8edc8;
+  color: var(--watch-ink);
+  background: var(--watch-line);
 }
 
 .forecast-panel--risk .forecast-status {
-  color: #a4453e;
-  background: #f8e2df;
+  color: var(--alert-text);
+  background: var(--alert-line);
 }
 
 .forecast-heading__actions button {
@@ -999,7 +999,7 @@ onBeforeUnmount(() => {
 }
 
 .forecast-metrics strong.is-negative {
-  color: #bd4c44;
+  color: var(--alert-text);
 }
 
 /* โหมดให้กำลังใจ: ยังบอกว่าติดลบด้วยตัวเลขจริง แต่ไม่ตะโกนด้วยสีแดง */
@@ -1133,15 +1133,15 @@ onBeforeUnmount(() => {
 }
 
 .forecast-panel--watch .forecast-advice {
-  border-left-color: #d0a52c;
-  color: #74601f;
-  background: #fff8df;
+  border-left-color: var(--watch);
+  color: var(--watch-ink);
+  background: var(--watch-tint);
 }
 
 .forecast-panel--risk .forecast-advice {
-  border-left-color: #ce5c53;
-  color: #88443e;
-  background: #fff0ee;
+  border-left-color: var(--alert-soft);
+  color: var(--alert-ink);
+  background: var(--alert-tint);
 }
 
 .forecast-panel footer {
@@ -1240,7 +1240,7 @@ onBeforeUnmount(() => {
 .eye { fill: #173c2d; }
 .eye-line, .mouth-line, .brow { fill: none; stroke: #173c2d; stroke-width: 6; stroke-linecap: round; }
 .mouth-fill { fill: #733b42; stroke: #173c2d; stroke-width: 4; }
-.cheek { fill: #ef8f88; opacity: 0.72; }
+.cheek { fill: #f2a8c4; opacity: 0.72; }
 .tear { fill: #77c9ef; stroke: #4388a8; stroke-width: 2; transform-origin: center; animation: tear-drop 1.25s ease-in infinite; }
 .tear--right { animation-delay: 0.35s; }
 .baht { fill: #e7ffac; font-family: 'Manrope', sans-serif; font-size: 25px; font-weight: 800; }
@@ -1260,7 +1260,7 @@ onBeforeUnmount(() => {
 .spark {
   position: absolute;
   z-index: 3;
-  color: #d6aa27;
+  color: var(--cheer);
   font-size: 1.25rem;
   animation: sparkle 1.4s ease-in-out infinite;
 }

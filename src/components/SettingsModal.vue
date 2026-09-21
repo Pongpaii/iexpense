@@ -2,7 +2,6 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useDailyReminder } from '../composables/useDailyReminder'
 import { useSalarySettings } from '../composables/useSalarySettings'
-import { useTheme } from '../composables/useTheme'
 import {
   createPlanItemId,
   dayKindEmojis,
@@ -41,13 +40,6 @@ const {
   saveMonthlySalary,
   toggleSalaryVisibility,
 } = useSalarySettings()
-const { theme, setTheme } = useTheme()
-const opiumEnabled = computed({
-  get: () => theme.value === 'opium',
-  set: (enabled: boolean) => {
-    setTheme(enabled ? 'opium' : 'default')
-  },
-})
 const {
   reminderEnabled,
   reminderTime,
@@ -343,23 +335,6 @@ onBeforeUnmount(() => {
           </header>
 
           <div class="settings-body">
-            <article class="setting-card opium-card" :class="{ 'is-active': opiumEnabled }">
-              <div class="opium-sigil" aria-hidden="true"><span>V</span></div>
-              <div class="setting-copy opium-copy">
-                <span class="opium-overline">APPEARANCE / VAMP SYSTEM</span>
-                <strong>OPIUM MODE</strong>
-                <p>สลับทั้งแอปเป็นโทน void black, blood red และ bone พร้อมมาสคอตเขา devil-vamp</p>
-                <div class="opium-tags" aria-hidden="true">
-                  <span>VOID</span><span>BLOOD</span><span>VAMP</span>
-                </div>
-              </div>
-              <label class="opium-toggle">
-                <input v-model="opiumEnabled" type="checkbox" aria-label="เปิดหรือปิด OPIUM MODE" :disabled="busy" />
-                <span class="opium-toggle__track" aria-hidden="true"><i></i></span>
-                <b>{{ opiumEnabled ? 'ON' : 'OFF' }}</b>
-              </label>
-            </article>
-
             <form class="setting-card salary-card" @submit.prevent="submitSalary">
               <div class="setting-icon setting-icon--salary" aria-hidden="true">฿</div>
               <div class="setting-copy salary-copy">
@@ -808,10 +783,10 @@ onBeforeUnmount(() => {
 .read-only-note {
   margin: 14px 0 0;
   padding: 10px 12px;
-  border: 1px solid #e6dcc1;
+  border: 1px solid var(--cheer-line);
   border-radius: 11px;
-  color: #86702f;
-  background: #fcf7e8;
+  color: var(--cheer-ink);
+  background: var(--cheer-tint);
   font-family: 'Noto Sans Thai', sans-serif;
   font-size: 0.66rem;
   line-height: 1.55;
@@ -941,7 +916,7 @@ onBeforeUnmount(() => {
 }
 
 .setting-copy .salary-feedback--error {
-  color: #b74740;
+  color: var(--alert-text);
 }
 
 .setting-copy .salary-feedback--success {
@@ -1246,15 +1221,15 @@ onBeforeUnmount(() => {
   height: 30px;
   place-items: center;
   padding: 0;
-  border: 1px solid #e7d3d1;
+  border: 1px solid var(--alert-line);
   border-radius: 8px;
-  color: #b4544c;
+  color: var(--alert-text);
   background: #fff;
   font-size: 1rem;
   line-height: 1;
 }
 
-.cap-plan-remove:hover:not(:disabled) { background: #fdf1ef; }
+.cap-plan-remove:hover:not(:disabled) { background: var(--alert-tint); }
 
 .cap-plan-add {
   justify-self: start;
@@ -1291,7 +1266,7 @@ onBeforeUnmount(() => {
 }
 
 .cap-plan-summary--over,
-.cap-plan-summary--over b { color: #b74740; }
+.cap-plan-summary--over b { color: var(--alert-text); }
 
 .cap-restore {
   justify-self: start;
@@ -1307,7 +1282,7 @@ onBeforeUnmount(() => {
 }
 
 .setting-copy .cap-feedback { color: #277451; }
-.setting-copy .cap-feedback--error { color: #b74740; }
+.setting-copy .cap-feedback--error { color: var(--alert-text); }
 
 .cap-save { align-self: end; }
 
@@ -1393,7 +1368,7 @@ onBeforeUnmount(() => {
 }
 
 .reminder-feedback { color: #277451 !important; }
-.reminder-feedback--error { color: #b74740 !important; }
+.reminder-feedback--error { color: var(--alert-text) !important; }
 
 .setting-icon--manage {
   color: #267551;
@@ -1401,8 +1376,8 @@ onBeforeUnmount(() => {
 }
 
 .setting-icon--danger {
-  color: #ba473f;
-  background: #f9e5e2;
+  color: var(--alert-text);
+  background: var(--alert-tint);
 }
 
 .setting-copy {
@@ -1458,22 +1433,22 @@ onBeforeUnmount(() => {
 }
 
 .danger-heading > span {
-  color: #bc5048;
+  color: var(--alert-text);
 }
 
 .setting-card--danger {
-  border-color: #efd7d4;
-  background: #fffafa;
+  border-color: var(--alert-line);
+  background: var(--alert-tint);
 }
 
 .setting-button--danger {
-  color: #b43f38;
-  border-color: #e7bdb9;
+  color: var(--alert-ink);
+  border-color: var(--alert-line);
 }
 
 .setting-button--danger:hover:not(:disabled) {
-  border-color: #d87870;
-  background: #fff1ef;
+  border-color: var(--alert-soft);
+  background: var(--alert-tint);
 }
 
 .reset-confirm {
@@ -1483,10 +1458,10 @@ onBeforeUnmount(() => {
   gap: 15px;
   margin-top: 10px;
   padding: 14px 15px;
-  border: 1px solid #eac3bf;
+  border: 1px solid var(--alert-line);
   border-radius: 12px;
-  color: #8f332d;
-  background: #fff2f0;
+  color: var(--alert-ink);
+  background: var(--alert-tint);
   font-family: 'Noto Sans Thai', sans-serif;
 }
 
@@ -1506,9 +1481,9 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  border: 1px solid #dfc3c0;
+  border: 1px solid var(--alert-line);
   border-radius: 8px;
-  color: #76514e;
+  color: var(--alert-muted);
   background: #fff;
   font-family: 'Noto Sans Thai', sans-serif;
   font-size: 0.65rem;
@@ -1517,8 +1492,8 @@ onBeforeUnmount(() => {
 
 .confirm-actions .confirm-delete {
   color: white;
-  border-color: #bd4941;
-  background: #bd4941;
+  border-color: var(--alert);
+  background: var(--alert);
 }
 
 .mini-spinner {

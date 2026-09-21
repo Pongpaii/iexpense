@@ -82,15 +82,15 @@ const comparisonTone = computed(() => {
 .month-comparison strong,.month-comparison small { display: block; font-family: 'Noto Sans Thai', sans-serif; }
 .month-comparison strong { color: #65736c; font-size: .68rem; }
 .month-comparison small { color: #929b96; font-size: .5rem; }
-.month-comparison.increase strong { color: #c35d51; }
+.month-comparison.increase strong { color: var(--alert-text); }
 .month-comparison.decrease strong { color: #32835b; }
 .top-category { margin: 10px 0 0; color: #7d8983; font: 500 .56rem 'Noto Sans Thai', sans-serif; text-align: center; }
 .top-category strong { color: #304b3e; }
 .comparison-note { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 8px 10px; border-radius: 9px; color: #64746c; background: #f0f4f1; font: 500 .57rem 'Noto Sans Thai', sans-serif; }
 .comparison-note span { display: grid; width: 20px; height: 20px; flex: 0 0 20px; place-items: center; border-radius: 6px; background: #e0e8e3; font-weight: 800; }
 .comparison-note p { margin: 0; }
-.comparison-note.increase { color: #995047; background: #fff0ed; }
-.comparison-note.increase span { background: #f7d8d3; }
+.comparison-note.increase { color: var(--alert-text); background: var(--alert-tint); }
+.comparison-note.increase span { background: var(--alert-line); }
 .comparison-note.decrease { color: #347454; background: #edf8f1; }
 .comparison-note.decrease span { background: #d5ebdd; }
 @media (max-width: 580px) { .analytics-panel { padding: 14px; } }

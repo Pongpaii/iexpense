@@ -1,13 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useTheme } from '../composables/useTheme'
 import type { Transaction, TransactionType } from '../types/transaction'
-import {
-  buildCategoryBreakdown,
-  categoryPalette,
-  formatPercent,
-  opiumCategoryPalette,
-} from '../utils/categoryBreakdown'
+import { buildCategoryBreakdown, categoryPalette, formatPercent } from '../utils/categoryBreakdown'
 import { formatBaht, formatDate } from '../utils/format'
 
 const props = withDefaults(
@@ -32,11 +26,6 @@ const props = withDefaults(
   },
 )
 
-const { theme } = useTheme()
-const activePalette = computed(() =>
-  theme.value === 'opium' ? opiumCategoryPalette : categoryPalette,
-)
-
 const RADIUS = 44
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS
 
@@ -52,7 +41,7 @@ watch(
 )
 
 const breakdown = computed(() =>
-  buildCategoryBreakdown(props.transactions, activeType.value, activePalette.value),
+  buildCategoryBreakdown(props.transactions, activeType.value, categoryPalette),
 )
 const slices = computed(() => breakdown.value.slices)
 const total = computed(() => breakdown.value.total)

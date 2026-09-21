@@ -70,7 +70,7 @@ onBeforeUnmount(clearTimer)
   border-radius: 16px;
   color: #fff;
   background: linear-gradient(135deg, #17402f, #23604a);
-  box-shadow: 0 20px 55px rgba(7, 28, 19, 0.38), 0 0 0 1px rgba(240, 214, 108, 0.16);
+  box-shadow: 0 20px 55px rgba(7, 28, 19, 0.38), 0 0 0 1px rgba(143, 208, 106, 0.16);
   font-family: 'Noto Sans Thai', sans-serif;
   transform: translateX(-50%);
 }
@@ -81,8 +81,8 @@ onBeforeUnmount(clearTimer)
   height: 54px;
   place-items: center;
   border-radius: 50%;
-  background: radial-gradient(circle at 32% 28%, #fff3c4, #f0d66c 62%, #d9b13f);
-  box-shadow: 0 0 0 4px rgba(240, 214, 108, 0.18);
+  background: radial-gradient(circle at 32% 28%, #f6ffe2, #c9f06c 62%, #8fd06a);
+  box-shadow: 0 0 0 4px rgba(143, 208, 106, 0.18);
   animation: badge-unlock 0.72s cubic-bezier(.2, .9, .2, 1) both,
     badge-glow 1.9s ease-in-out 0.72s infinite;
 }
@@ -140,8 +140,8 @@ onBeforeUnmount(clearTimer)
 }
 
 @keyframes badge-glow {
-  0%, 100% { box-shadow: 0 0 0 4px rgba(240, 214, 108, 0.18); }
-  50% { box-shadow: 0 0 0 9px rgba(240, 214, 108, 0.05), 0 0 22px rgba(240, 214, 108, 0.5); }
+  0%, 100% { box-shadow: 0 0 0 4px rgba(143, 208, 106, 0.18); }
+  50% { box-shadow: 0 0 0 9px rgba(143, 208, 106, 0.05), 0 0 22px rgba(143, 208, 106, 0.5); }
 }
 
 .badge-toast-enter-active,

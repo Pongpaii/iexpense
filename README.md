@@ -2,7 +2,7 @@
 
 แอปบันทึกรายรับ–รายจ่ายภาษาไทยสำหรับเว็บ, PWA และ Android สร้างด้วย Vue 3, TypeScript, Vite, Supabase และ Capacitor
 
-Money Flow รองรับการล็อกอิน, การวิเคราะห์ค่าใช้จ่าย, การทำงานขณะออฟไลน์, การแจ้งเตือนรายวัน, ธีม OPIUM และโหมด Demo ที่ทดลองใช้ได้โดยไม่ต้องมีฐานข้อมูล
+Money Flow รองรับการล็อกอิน, การวิเคราะห์ค่าใช้จ่าย, การทำงานขณะออฟไลน์, การแจ้งเตือนรายวัน และโหมด Demo ที่ทดลองใช้ได้โดยไม่ต้องมีฐานข้อมูล
 
 ## ความสามารถหลัก
 
@@ -15,7 +15,6 @@ Money Flow รองรับการล็อกอิน, การวิเ�
 - ค่าอาหารและค่าเดินทางถูกยกขึ้นเป็นอันดับต้นในทุกมุมมองที่เกี่ยวกับงบ
 - ตั้งค่าเงินเดือน, เพดานรายวัน และการแจ้งเตือน
 - ระบบ achievement และ streak
-- ธีมปกติและธีม OPIUM ที่จำค่าบนอุปกรณ์
 - PWA พร้อม install prompt และ service worker แบบ auto-update
 - Android app ผ่าน Capacitor พร้อม GitHub Actions สำหรับสร้าง APK
 - โหมด Demo แบบอ่านอย่างเดียว ไม่เรียก Supabase
@@ -381,7 +380,7 @@ src/
     TransactionForm.vue          ฟอร์มเพิ่ม/แก้ไขพร้อม Zod validation
     TransactionList.vue          รายการและ incremental rendering
     SummaryCards.vue             การ์ดสรุปพร้อม Skeleton state
-    SettingsModal.vue            การตั้งค่า, export และ OPIUM theme
+    SettingsModal.vue            การตั้งค่า, export และ danger zone
     CategoryDonut.vue            สัดส่วนรายจ่ายตามหมวดหมู่
     RunwayPanel.vue              เงินที่เหลืออยู่ได้อีกกี่วัน + คันโยกรายหมวด
     DailyCapBar.vue              งบรายวัน เลือกหมวดที่ไม่นับได้
@@ -397,7 +396,6 @@ src/
     useForecastSettings.ts       หมวดที่กันออกจากการคาดการณ์/runway
     useUndoDelete.ts             undo transaction deletion
     useInstallPrompt.ts          PWA installation
-    useTheme.ts                  persisted default/OPIUM theme
   schemas/
     transaction.schema.ts        client transaction constraints
   lib/

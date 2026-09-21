@@ -159,7 +159,7 @@ const barHeight = (amount: number) => {
 }
 
 .legend-dot--expense {
-  background: #d66b62;
+  background: var(--alert);
 }
 
 .chart {
@@ -219,7 +219,7 @@ const barHeight = (amount: number) => {
 }
 
 .bar--expense {
-  background: linear-gradient(180deg, #e58a82, #c9544b);
+  background: linear-gradient(180deg, var(--alert-soft), var(--alert-text));
 }
 
 .month-label {

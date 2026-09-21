@@ -125,17 +125,17 @@ const { currentStreak, longestStreak, level, icon, headline, hint, atRisk } = us
 }
 
 .streak-pill--starting .streak-pill__icon {
-  background: #fdf1e3;
+  background: var(--cheer-tint);
 }
 
 .streak-pill--hot {
-  border-color: #f0c896;
-  background: linear-gradient(120deg, #fffaf2, #fff5e6);
+  border-color: var(--cheer-line);
+  background: linear-gradient(120deg, #fbfef6, var(--cheer-tint));
   animation: streak-glow 2.6s ease-in-out infinite;
 }
 
 .streak-pill--hot .streak-pill__icon {
-  background: #fbe3c6;
+  background: var(--cheer-line);
   animation: flame 1.5s ease-in-out infinite;
 }
 
@@ -151,7 +151,7 @@ const { currentStreak, longestStreak, level, icon, headline, hint, atRisk } = us
 }
 
 .streak-pill--at-risk .streak-pill__copy strong {
-  color: #9a6a1c;
+  color: var(--cheer-text);
 }
 
 @keyframes flame {
@@ -162,7 +162,7 @@ const { currentStreak, longestStreak, level, icon, headline, hint, atRisk } = us
 
 @keyframes streak-glow {
   0%, 100% { box-shadow: 0 4px 13px rgba(25, 77, 59, 0.05); }
-  50% { box-shadow: 0 4px 18px rgba(232, 156, 62, 0.28); }
+  50% { box-shadow: 0 4px 18px rgba(143, 208, 106, 0.28); }
 }
 
 @keyframes streak-glow-cool {
