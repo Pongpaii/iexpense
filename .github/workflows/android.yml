@@ -43,9 +43,10 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK 36
-        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+        with:
+          # The default ('tools platform-tools') fails on newer cmdline-tools
+          # because the legacy 'tools' package no longer exists.
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
 
       - name: Install JavaScript dependencies
         run: npm ci
