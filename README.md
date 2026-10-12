@@ -32,7 +32,7 @@ Money Flow รองรับการล็อกอิน, การวิเ�
 - Lazy-loaded analytics components และ Skeleton loading
 - ดึง transaction จาก Supabase เป็นช่วงและแสดงรายการครั้งละ 50 แถว
 - Security headers และ cache policy สำหรับ Vercel
-- CI ตรวจ TypeScript, ESLint, 455 tests และ production build
+- CI ตรวจ TypeScript, ESLint, 467 tests และ production build
 
 ## เทคโนโลยี
 
@@ -216,8 +216,8 @@ npm run build
 สถานะชุดทดสอบล่าสุด:
 
 ```text
-23 test files passed
-455 tests passed
+25 test files passed
+467 tests passed
 0 tests failed
 ```
 

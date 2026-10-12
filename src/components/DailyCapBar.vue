@@ -17,6 +17,7 @@ import {
   type TransactionCategory,
 } from '../types/transaction'
 import { formatBaht } from '../utils/format'
+import { offsetSameCategoryRefunds } from '../utils/refundOffset'
 
 const props = withDefaults(
   defineProps<{
@@ -53,7 +54,22 @@ const planSpare = computed(() => Math.round((cap.value - planTotal.value) * 100)
 const countedExpenses = computed(() =>
   splitCountedExpenses(props.transactions, capExcludedCategories.value),
 )
-const expenses = computed(() => countedExpenses.value.counted)
+/** หักเงินคืน (รายรับหมวดเดียวกันที่ไม่ใช่เงินเดือน) ออกจากรายจ่ายของวันนั้น */
+const refundOffset = computed(() =>
+  offsetSameCategoryRefunds(
+    countedExpenses.value.counted,
+    props.transactions,
+    capExcludedCategories.value,
+  ),
+)
+const expenses = computed(() => refundOffset.value.expenses)
+const refundedTotal = computed(() => refundOffset.value.refundedTotal)
+const grossSpent = computed(
+  () =>
+    Math.round(
+      countedExpenses.value.counted.reduce((sum, item) => sum + (Number(item.amount) || 0), 0) * 100,
+    ) / 100,
+)
 const spent = computed(
   () => Math.round(expenses.value.reduce((sum, item) => sum + (Number(item.amount) || 0), 0) * 100) / 100,
 )
@@ -243,6 +259,12 @@ const spareLevel = computed(() => {
       <span>{{ percent }}% ของงบ</span>
     </p>
     <small class="cap-hint">{{ hint }}</small>
+
+    <small v-if="refundedTotal > 0" class="cap-refund">
+      จ่าย {{ formatBaht(grossSpent) }} · ได้คืน {{ formatBaht(refundedTotal) }} · นับจริง
+      {{ formatBaht(spent) }}
+      <span>หักรายรับหมวดเดียวกันของ{{ isToday ? 'วันนี้' : 'วันนั้น' }}ให้แล้ว (ไม่รวมเงินเดือน)</span>
+    </small>
 
     <small v-if="hasCapExcludedCategories" class="cap-excluded">
       ไม่นับ: {{ excludedSummary }}
@@ -494,6 +516,24 @@ const spareLevel = computed(() => {
   color: var(--alert-muted);
   font-size: 0.58rem;
   line-height: 1.5;
+}
+
+.cap-refund {
+  display: grid;
+  gap: 2px;
+  padding: 6px 9px;
+  border-radius: 9px;
+  color: #2b6b4d;
+  background: var(--green-light);
+  font-size: 0.6rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.cap-refund span {
+  color: var(--muted);
+  font-size: 0.55rem;
+  font-weight: 600;
 }
 
 .cap-edit:hover {

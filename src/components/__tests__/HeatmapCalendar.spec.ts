@@ -70,3 +70,47 @@ describe('HeatmapCalendar — ตัวกรองหมวดหมู่', ()
     expect(foodChip!.classes()).toContain('is-off')
   })
 })
+
+
+describe('HeatmapCalendar — ยอดสุทธิรายวัน', () => {
+  const mountWith = (list: ReturnType<typeof makeTransaction>[]) =>
+    mount(HeatmapCalendar, { props: { transactions: list, month: MONTH } })
+
+  const cellOf = (wrapper: ReturnType<typeof mountWith>, date: string) =>
+    wrapper.find(`.heatmap-cell[aria-label^="${Number(date.slice(-2))} "]`)
+
+  it('โอนให้เพื่อนแล้วเพื่อนโอนคืนวันเดียวกัน ช่องวันนั้นไม่ขึ้นเป็นรายจ่าย', () => {
+    const wrapper = mountWith([
+      makeTransaction({ category: 'อื่น ๆ', amount: 1_000, transaction_date: '2026-03-10' }),
+      makeTransaction({
+        type: 'income',
+        category: 'อื่น ๆ',
+        amount: 1_000,
+        transaction_date: '2026-03-10',
+      }),
+    ])
+
+    const cell = cellOf(wrapper, '2026-03-10')
+    expect(cell.classes()).toContain('heatmap-cell--level-0')
+    expect(cell.find('.heatmap-cell__expense').exists()).toBe(false)
+    expect(cell.find('.heatmap-cell__even').exists()).toBe(true)
+  })
+
+  it('แสดงยอดสุทธิ (รายจ่าย − รายรับ) ตัวเดียวในช่อง', () => {
+    const wrapper = mountWith([
+      makeTransaction({ amount: 700, transaction_date: '2026-03-10' }),
+      makeTransaction({ type: 'income', amount: 200, transaction_date: '2026-03-10' }),
+      makeTransaction({ amount: 100, transaction_date: '2026-03-11' }),
+      makeTransaction({ type: 'income', amount: 400, transaction_date: '2026-03-11' }),
+    ])
+
+    const spendDay = cellOf(wrapper, '2026-03-10')
+    expect(digitsOf(spendDay.find('.heatmap-cell__expense').text())).toBe('500')
+    expect(spendDay.find('.heatmap-cell__income').exists()).toBe(false)
+
+    const earnDay = cellOf(wrapper, '2026-03-11')
+    expect(earnDay.find('.heatmap-cell__expense').exists()).toBe(false)
+    expect(digitsOf(earnDay.find('.heatmap-cell__income').text())).toBe('300')
+    expect(earnDay.classes()).toContain('heatmap-cell--level-0')
+  })
+})

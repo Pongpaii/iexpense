@@ -90,6 +90,14 @@ interface DayTotals {
   count: number
 }
 
+/**
+ * ยอดสุทธิของวัน = รายจ่าย − รายรับ · บวกคือใช้เงินจริง ลบคือได้เงินมากกว่าที่จ่าย
+ *
+ * ทำไม: ผู้ใช้โอนให้เพื่อนแล้วเพื่อนโอนคืนในวันเดียวกัน ถ้านับแต่รายจ่าย
+ * ช่องวันนั้นจะขึ้นแดงเหมือนใช้เกิน ทั้งที่เงินไม่ได้หายไปไหน
+ */
+const netOf = ({ expense, income }: DayTotals) => Math.round((expense - income) * 100) / 100
+
 /** รวมยอดรายจ่าย/รายรับต่อวันของเดือนที่กำลังดู */
 const totalsByDate = computed(() => {
   const prefix = viewMonth.value
@@ -109,10 +117,10 @@ const totalsByDate = computed(() => {
   return map
 })
 
-/** ยอดรายจ่ายของวันที่มีการใช้เงิน เรียงจากน้อยไปมาก ใช้หา quartile */
+/** ยอดสุทธิของวันที่ใช้เงินจริง (สุทธิเป็นบวก) เรียงจากน้อยไปมาก ใช้หา quartile */
 const spentValues = computed(() =>
   [...totalsByDate.value.values()]
-    .map(({ expense }) => expense)
+    .map(netOf)
     .filter((value) => value > 0)
     .sort((a, b) => a - b),
 )
@@ -156,7 +164,10 @@ interface HeatmapCell {
   key: string
   date: string | null
   day: number
+  /** ยอดใช้สุทธิ ไม่ต่ำกว่า 0 ใช้ตัดสินสีและสถิติ */
   spent: number
+  /** รายจ่าย − รายรับ ติดลบได้ ใช้แสดงตัวเลขในช่อง */
+  net: number
   income: number
   count: number
   level: number
@@ -180,6 +191,7 @@ const cells = computed<HeatmapCell[]>(() => {
       date: null,
       day: 0,
       spent: 0,
+      net: 0,
       income: 0,
       count: 0,
       level: 0,
@@ -192,7 +204,8 @@ const cells = computed<HeatmapCell[]>(() => {
   for (let day = 1; day <= dayCount; day += 1) {
     const date = `${monthPrefix}-${String(day).padStart(2, '0')}`
     const totals = totalsByDate.value.get(date)
-    const spent = totals?.expense ?? 0
+    const net = totals ? netOf(totals) : 0
+    const spent = Math.max(0, net)
     const dateLabel = dayFormatter.format(new Date(year, month - 1, day))
 
     result.push({
@@ -200,13 +213,14 @@ const cells = computed<HeatmapCell[]>(() => {
       date,
       day,
       spent,
+      net,
       income: totals?.income ?? 0,
       count: totals?.count ?? 0,
       level: levelForDate(date, spent),
       isToday: date === todayDate,
       isFuture: date > todayDate,
       label: totals
-        ? `${dateLabel} — ${formatBaht(spent)} (${totals.count} รายการ)`
+        ? `${dateLabel} — สุทธิ ${net < 0 ? '+' : ''}${formatBaht(Math.abs(net))} (จ่าย ${formatBaht(totals.expense)} · รับ ${formatBaht(totals.income)} · ${totals.count} รายการ)`
         : `${dateLabel} — ยังไม่มีรายการ`,
     })
   }
@@ -305,7 +319,7 @@ const legendLabels = computed(() =>
 
     <div class="heatmap-stats">
       <span><small>รายจ่ายเดือนนี้</small><b>{{ formatBaht(monthExpense) }}</b></span>
-      <span><small>วันที่มีรายจ่าย</small><b>{{ activeDayCount }} วัน</b></span>
+      <span><small>วันที่ใช้เงินจริง</small><b>{{ activeDayCount }} วัน</b></span>
       <span v-if="busiestDay"><small>วันที่ใช้มากสุด</small><b>{{ busiestDay.day }} — {{ formatBaht(busiestDay.spent) }}</b></span>
       <span v-if="usesCapScale && overCapDays > 0" class="heatmap-stats__warn">
         <small>วันที่เกินเพดาน</small><b>{{ overCapDays }} วัน</b>
@@ -342,16 +356,17 @@ const legendLabels = computed(() =>
         >
           <span class="heatmap-cell__day">{{ cell.day }}</span>
 
-          <span v-if="cell.spent > 0 || cell.income > 0" class="heatmap-cell__amounts">
-            <span v-if="cell.spent > 0" class="heatmap-cell__expense">{{ formatBaht(cell.spent) }}</span>
-            <span v-if="cell.income > 0" class="heatmap-cell__income">+{{ formatBaht(cell.income) }}</span>
+          <span v-if="cell.count > 0" class="heatmap-cell__amounts">
+            <span v-if="cell.net > 0" class="heatmap-cell__expense">{{ formatBaht(cell.net) }}</span>
+            <span v-else-if="cell.net < 0" class="heatmap-cell__income">+{{ formatBaht(-cell.net) }}</span>
+            <span v-else class="heatmap-cell__even">{{ formatBaht(0) }}</span>
           </span>
         </button>
       </template>
     </div>
 
     <p class="heatmap-tooltip" role="status" aria-live="polite">
-      {{ tooltipText || 'ชี้หรือกดที่วันเพื่อดูยอดรายจ่าย แล้วกดเพื่อไปหน้าจดรายการของวันนั้น' }}
+      {{ tooltipText || 'ตัวเลขในช่องคือยอดสุทธิของวัน (รายจ่าย − รายรับ) ชี้หรือกดที่วันเพื่อดูรายละเอียด แล้วกดเพื่อไปหน้าจดรายการของวันนั้น' }}
     </p>
 
     <footer class="heatmap-legend">
@@ -650,7 +665,8 @@ const legendLabels = computed(() =>
 }
 
 .heatmap-cell__expense,
-.heatmap-cell__income {
+.heatmap-cell__income,
+.heatmap-cell__even {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -666,7 +682,13 @@ const legendLabels = computed(() =>
 
 .heatmap-cell__income {
   color: #15803d;
-  font-size: 0.52rem;
+  font-size: 0.6rem;
+  font-weight: 800;
+}
+
+.heatmap-cell__even {
+  color: var(--muted);
+  font-size: 0.6rem;
   font-weight: 700;
 }
 
@@ -731,15 +753,17 @@ const legendLabels = computed(() =>
   .heatmap-weekdays,
   .heatmap-grid { gap: 4px; }
   .heatmap-cell { font-size: 0.55rem; }
-  .heatmap-cell__expense { font-size: 0.55rem; }
-  .heatmap-cell__income { font-size: 0.48rem; }
+  .heatmap-cell__expense,
+  .heatmap-cell__income,
+  .heatmap-cell__even { font-size: 0.55rem; }
 }
 
-/* จอแคบมาก: ซ่อนบรรทัดรายรับ เหลือเลขวันกับรายจ่าย */
+/* จอแคบมาก: ช่องเหลือตัวเลขสุทธิตัวเดียวอยู่แล้ว แค่ย่อขนาดลง */
 @media (max-width: 400px) {
   .heatmap-cell { min-height: 46px; }
-  .heatmap-cell__income { display: none; }
-  .heatmap-cell__expense { font-size: 0.5rem; }
+  .heatmap-cell__expense,
+  .heatmap-cell__income,
+  .heatmap-cell__even { font-size: 0.5rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
