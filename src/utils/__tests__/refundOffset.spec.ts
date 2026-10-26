@@ -10,10 +10,10 @@ const income = (amount: number, category: TransactionCategory | null) =>
 
 describe('isRefundCandidate', () => {
   it('รับเฉพาะรายรับที่มีหมวดและไม่ใช่เงินเดือน', () => {
-    expect(isRefundCandidate(income(100, 'อื่น ๆ'))).toBe(true)
+    expect(isRefundCandidate(income(100, 'ช้อปปิ้ง'))).toBe(true)
     expect(isRefundCandidate(income(100, 'เงินเดือน'))).toBe(false)
     expect(isRefundCandidate(income(100, null))).toBe(false)
-    expect(isRefundCandidate(expense(100, 'อื่น ๆ'))).toBe(false)
+    expect(isRefundCandidate(expense(100, 'ช้อปปิ้ง'))).toBe(false)
   })
 })
 
@@ -21,8 +21,8 @@ describe('offsetSameCategoryRefunds', () => {
   it('เพื่อนโอนคืนเต็มจำนวน รายจ่ายก้อนนั้นหายไปจากงบ', () => {
     const food = expense(60, 'อาหาร')
     const result = offsetSameCategoryRefunds(
-      [food, expense(500, 'อื่น ๆ')],
-      [income(500, 'อื่น ๆ')],
+      [food, expense(500, 'ช้อปปิ้ง')],
+      [income(500, 'ช้อปปิ้ง')],
     )
 
     expect(result.expenses).toEqual([food])
@@ -40,7 +40,7 @@ describe('offsetSameCategoryRefunds', () => {
   })
 
   it('คืนเกินรายจ่ายไม่ทำให้ยอดติดลบ และนับยอดคืนเท่าที่หักได้จริง', () => {
-    const result = offsetSameCategoryRefunds([expense(200, 'อื่น ๆ')], [income(900, 'อื่น ๆ')])
+    const result = offsetSameCategoryRefunds([expense(200, 'ช้อปปิ้ง')], [income(900, 'ช้อปปิ้ง')])
 
     expect(result.expenses).toEqual([])
     expect(result.refundedTotal).toBe(200)

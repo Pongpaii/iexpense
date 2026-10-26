@@ -3,6 +3,7 @@ export type TransactionType = 'income' | 'expense'
 export const transactionCategories = [
   { value: 'อาหาร', emoji: '🍜' },
   { value: 'การเดินทาง', emoji: '🚗' },
+  { value: 'เครื่องดื่ม', emoji: '🥤' },
   { value: 'ช้อปปิ้ง', emoji: '🛍️' },
   { value: 'ท่องเที่ยว', emoji: '✈️' },
   { value: 'ที่พัก', emoji: '🏠' },
@@ -10,8 +11,10 @@ export const transactionCategories = [
   { value: 'สุขภาพ', emoji: '💊' },
   { value: 'การศึกษา', emoji: '📚' },
   { value: 'เงินเดือน', emoji: '💰' },
-  { value: 'อื่น ๆ', emoji: '✨' },
 ] as const
+
+export const isTransactionCategory = (value: unknown): value is TransactionCategory =>
+  typeof value === 'string' && transactionCategories.some((option) => option.value === value)
 
 export type TransactionCategory = (typeof transactionCategories)[number]['value']
 

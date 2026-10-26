@@ -21,16 +21,16 @@ const monthlyPlan: DemoEntry[] = [
   { day: 6, description: 'กาแฟกับขนม', amount: 120, type: 'expense', category: 'อาหาร' },
   { day: 7, description: 'ซื้อของใช้เข้าบ้าน', amount: 860, type: 'expense', category: 'ช้อปปิ้ง' },
   { day: 9, description: 'ข้าวเย็นกับเพื่อน', amount: 340, type: 'expense', category: 'อาหาร' },
-  { day: 10, description: 'รับงานฟรีแลนซ์ทำเว็บ', amount: 3500, type: 'income', category: 'อื่น ๆ' },
+  { day: 10, description: 'รับงานฟรีแลนซ์ทำเว็บ', amount: 3500, type: 'income', category: null },
   { day: 11, description: 'ค่ารถไฟฟ้า', amount: 186, type: 'expense', category: 'การเดินทาง' },
   { day: 12, description: 'วิตามินกับยาสามัญ', amount: 430, type: 'expense', category: 'สุขภาพ' },
-  { day: 14, description: 'ดูหนังกับข้าวเย็น', amount: 520, type: 'expense', category: 'อื่น ๆ' },
+  { day: 14, description: 'ดูหนังกับข้าวเย็น', amount: 520, type: 'expense', category: null },
   { day: 15, description: 'ข้าวกลางวันทั้งสัปดาห์', amount: 375, type: 'expense', category: 'อาหาร' },
   { day: 16, description: 'คอร์สเรียนออนไลน์', amount: 590, type: 'expense', category: 'การศึกษา' },
   { day: 18, description: 'ซื้อเสื้อผ้า', amount: 1290, type: 'expense', category: 'ช้อปปิ้ง' },
   { day: 19, description: 'ค่าแท็กซี่กลับบ้าน', amount: 210, type: 'expense', category: 'การเดินทาง' },
   { day: 21, description: 'ตรวจสุขภาพประจำปี', amount: 900, type: 'expense', category: 'สุขภาพ' },
-  { day: 22, description: 'ชานมไข่มุก', amount: 85, type: 'expense', category: 'อาหาร' },
+  { day: 22, description: 'ชานมไข่มุก', amount: 85, type: 'expense', category: 'เครื่องดื่ม' },
   { day: 24, description: 'เที่ยวทะเลสุดสัปดาห์', amount: 2400, type: 'expense', category: 'ท่องเที่ยว' },
   { day: 25, description: 'เงินเดือน', amount: 17000, type: 'income', category: 'เงินเดือน' },
   { day: 26, description: 'ค่าสตรีมมิ่งรายเดือน', amount: 279, type: 'expense', category: 'บิลและบริการ' },
@@ -40,12 +40,12 @@ const monthlyPlan: DemoEntry[] = [
 
 /** รายการของ "วันนี้" เพื่อให้หน้าจดรายการมีข้อมูลให้ดูทันที */
 const todayPlan: Omit<DemoEntry, 'day'>[] = [
-  { description: 'กาแฟเช้าก่อนเข้างาน', amount: 75, type: 'expense', category: 'อาหาร' },
+  { description: 'กาแฟเช้าก่อนเข้างาน', amount: 75, type: 'expense', category: 'เครื่องดื่ม' },
   { description: 'ข้าวกลางวันข้าวมันไก่', amount: 60, type: 'expense', category: 'อาหาร' },
   { description: 'ค่าวินมอเตอร์ไซค์', amount: 40, type: 'expense', category: 'การเดินทาง' },
   { description: 'ซื้อยาแก้แพ้', amount: 145, type: 'expense', category: 'สุขภาพ' },
   { description: 'สั่งของออนไลน์', amount: 390, type: 'expense', category: 'ช้อปปิ้ง' },
-  { description: 'ขายของมือสอง', amount: 850, type: 'income', category: 'อื่น ๆ' },
+  { description: 'ขายของมือสอง', amount: 850, type: 'income', category: null },
 ]
 
 const MONTHS_BACK = 5

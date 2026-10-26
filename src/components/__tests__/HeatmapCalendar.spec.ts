@@ -81,10 +81,10 @@ describe('HeatmapCalendar — ยอดสุทธิรายวัน', () =>
 
   it('โอนให้เพื่อนแล้วเพื่อนโอนคืนวันเดียวกัน ช่องวันนั้นไม่ขึ้นเป็นรายจ่าย', () => {
     const wrapper = mountWith([
-      makeTransaction({ category: 'อื่น ๆ', amount: 1_000, transaction_date: '2026-03-10' }),
+      makeTransaction({ category: 'ช้อปปิ้ง', amount: 1_000, transaction_date: '2026-03-10' }),
       makeTransaction({
         type: 'income',
-        category: 'อื่น ๆ',
+        category: 'ช้อปปิ้ง',
         amount: 1_000,
         transaction_date: '2026-03-10',
       }),

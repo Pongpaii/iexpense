@@ -23,8 +23,8 @@ describe('DailyCapBar — เงินคืนในวันเดียวก
   it('โอนให้เพื่อนแล้วเพื่อนโอนคืน ไม่ขึ้นว่าเกินงบ', () => {
     const wrapper = mountBar([
       makeTransaction({ category: 'อาหาร', amount: 60, transaction_date: DATE }),
-      makeTransaction({ category: 'อื่น ๆ', amount: 1_000, transaction_date: DATE }),
-      makeTransaction({ type: 'income', category: 'อื่น ๆ', amount: 1_000, transaction_date: DATE }),
+      makeTransaction({ category: 'ช้อปปิ้ง', amount: 1_000, transaction_date: DATE }),
+      makeTransaction({ type: 'income', category: 'ช้อปปิ้ง', amount: 1_000, transaction_date: DATE }),
     ])
 
     expect(digitsOf(wrapper.find('.cap-amounts strong').text())).toBe('60')

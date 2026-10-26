@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import {
+  isTransactionCategory,
   transactionCategories,
   type Transaction,
   type TransactionCategory,
@@ -88,7 +89,9 @@ watch(
     form.description = transaction.description
     form.amount = transaction.amount
     form.type = transaction.type
-    form.category = transaction.category ?? ''
+    // รายการเก่าอาจมีหมวดที่เลิกใช้แล้ว (เช่น "อื่น ๆ") ถ้าคงค่าไว้ Zod จะปฏิเสธ
+    // ทั้งที่ผู้ใช้มองไม่เห็นชิปที่ถูกเลือก จึงถือเป็น "ไม่ระบุหมวด" ให้แก้ต่อได้
+    form.category = isTransactionCategory(transaction.category) ? transaction.category : ''
     form.transaction_date = transaction.transaction_date
     fieldErrors.value = {}
   },
